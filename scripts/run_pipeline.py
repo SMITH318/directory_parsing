@@ -81,33 +81,33 @@ def main():
 
     # Logic to select Step 2 script and determine OCR output filename
     if args.ocr_engine == "gemini":
-        ocr_script = "process_pdfs_gemini.py"
+        ocr_script = "02_process_pdfs_gemini.py"
         ocr_output_file = "ocr_output.json"
     elif args.ocr_engine == "paddleocr":
-        ocr_script = "process_pdfs.py"
+        ocr_script = "02_process_pdfs.py"
         ocr_output_file = "ocr_output.jsonl"
     elif args.ocr_engine == "surya":
-        ocr_script = "process_images_surya_batch.py"
+        ocr_script = "02_process_images_surya_batch.py"
         ocr_output_file = "ocr_output.jsonl"
     elif args.ocr_engine == "ocrmac":
-        ocr_script = "process_images_ocrmac.py"
+        ocr_script = "02_process_images_ocrmac.py"
         ocr_output_file = "ocr_output_vision.jsonl"
     else:
-        ocr_script = "process_pdfs_tesseract.py"
+        ocr_script = "02_process_pdfs_tesseract.py"
         ocr_output_file = "ocr_output_tesseract.jsonl"
 
     # The Pipeline Sequence
     # Steps that don't use config: preprocess, OCR, segment
     # Steps that use config: tag, timeline, analyze, entities, dashboard
     steps = [
-        ("preprocess.py", None),           # Step 1: 300DPI Snippets
+        ("01_preprocess.py", None),           # Step 1: 300DPI Snippets
         (ocr_script, None),                # Step 2: OCR Engine
-        ("segment_articles.py", ["--input", ocr_output_file]),  # Step 3: Article Grouping
-        ("tag_articles.py", config_args),  # Step 4: Thematic Classification (configurable)
-        ("generate_timeline.py", config_args),  # Step 5: Timeline Analysis (configurable)
-        ("analyze_text.py", config_args),  # Step 6: Text Analysis (configurable)
-        ("extract_entities_enhanced.py", config_args),  # Step 7: Entity Extraction & Network Analysis (optional)
-        ("generate_dashboard.py", config_args),  # Step 8: Generate HTML Dashboard (optional)
+        ("03_segment_articles.py", ["--input", ocr_output_file]),  # Step 3: Article Grouping
+        ("04_tag_articles.py", config_args),  # Step 4: Thematic Classification (configurable)
+        ("05_generate_timeline.py", config_args),  # Step 5: Timeline Analysis (configurable)
+        ("06_analyze_text.py", config_args),  # Step 6: Text Analysis (configurable)
+        ("07_extract_entities_enhanced.py", config_args),  # Step 7: Entity Extraction & Network Analysis (optional)
+        ("08_generate_dashboard.py", config_args),  # Step 8: Generate HTML Dashboard (optional)
     ]
 
     success_count = 0
