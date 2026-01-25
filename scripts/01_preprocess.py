@@ -20,6 +20,41 @@ from PIL import Image
 # 1. BYPASS PILLOW LIMIT
 Image.MAX_IMAGE_PIXELS = None 
 
+def detect_skew_bounds(img_gray):
+    """Detect skew center, direction, angle using minAreaRect method."""
+    if img_gray is None or img_gray.size == 0: return [0]
+    thresh = cv2.threshold(img_gray, 0, 1, cv2.THRESH_OTSU + cv2.THRESH_BINARY_INV)[1]
+    coords, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not coords: return [0]
+    rect = cv2.minAreaRect(np.vstack(coords))
+    angle = rect[-1]
+    if angle < -45:
+        angle = 90 + angle
+    return (rect[0], rect[1], angle)
+
+def deskew_image(img_gray, angle):
+    """Rotate image to deskew based on detected angle."""
+    (h, w) = img_gray.shape
+    center = (w // 2, h // 2)
+    M = cv2.getRotationMatrix2D(center, angle, 1.0)
+    rotated = cv2.warpAffine(img_gray, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+    return rotated
+
+def clip_image_to_text(img_gray, skew_rect, padding=10):
+    if img_gray is None or img_gray.size == 0: return [0]
+    (h, w) = img_gray.shape
+    center = (w // 2, h // 2)
+    M = cv2.getRotationMatrix2D(center, skew_rect[2], 1.0)
+    box = cv2.boxPoints(skew_rect)
+    pts = np.intp(cv2.transform(np.array([box]), M))[0]
+    pts[pts < 0] = 0
+    ys = pts[:, 1]
+    xs = pts[:, 0]
+    y_min = min(ys) - padding
+    y_max = max(ys) + padding
+    x_min = min(xs) - padding
+    x_max = max(xs) + padding
+    return img_gray[y_min:y_max, x_min:x_max]
 
 def detect_vertical_columns(img_gray):
     if img_gray is None or img_gray.size == 0: return [0]
@@ -67,7 +102,7 @@ def detect_horizontal_rules(column_gray):
     max_p = np.max(y_proj)
     if max_p == 0: return [0, h]
     
-    peak_thresh = max_p * 0.1 # Lowered threshold for tilted rules
+    peak_thresh = max_p * 0.1 # Lowered threshold for tilted rules - TODO: remove? make more like vertical?
     dividers = []
     y = 0
     while y < h:
@@ -130,6 +165,9 @@ def main():
     MIN_KB = 250
     DPI = 300
     MAX_SNIP_HEIGHT = 3400#2000
+    DESCEW_PAGES = False
+    CLIP_PAGES = False # clipping screws up most pages
+    CLIP_PADDING = 5
 
     pdf_files = sorted(pdf_dir.glob("*.pdf"))
     print(f"Found {len(pdf_files)} PDFs to process")
@@ -179,11 +217,25 @@ def main():
             # Free the PIL image immediately
             del page_img
             gc.collect()
-            
-            v_bounds = detect_vertical_columns(img_gray)
-            print(v_bounds)
-            page_snippets = []
 
+            # try descewing
+            if DESCEW_PAGES or CLIP_PAGES:
+                skew_rect = detect_skew_bounds(img_gray)
+                angle = skew_rect[2]
+                if DESCEW_PAGES and abs(angle) > 0.1: # only deskew if significant - do we want this??
+                    img_gray = deskew_image(img_gray, angle)
+                    print(f"(deskewed {angle:.2f}°)", end=" ")
+                if CLIP_PAGES:
+                    img_gray = clip_image_to_text(img_gray, skew_rect, padding=CLIP_PADDING)
+                    print("(clipped)", end=" ")
+            
+            # Detect columns
+            v_bounds = detect_vertical_columns(img_gray)
+            #print(v_bounds)
+
+            # Detect horizontal rules within each column and extract snippets
+            # TODO: consider looking for horizontal rules across entire page
+            page_snippets = []
             for c_idx in range(len(v_bounds)-1):
                 x1, x2 = v_bounds[c_idx], v_bounds[c_idx+1]
                 if (x2 - x1) < 15: continue 

@@ -54,15 +54,17 @@ def gemini_ocr(image_path, max_retries=3):
 
     prompt = (
         "Extract all text from this image of a column from a directory. "
-        "For each line of text, provide the text content and its bounding box coordinates. "
+        "For each line of text, provide the text content, its bounding box coordinates, and a confidence score (between 0 and 1). "
         "Lines of text extend horizontally across the whole column. "
         "Return ONLY a JSON array with this exact format:\n"
         '[\n'
-        '  {"text": "example text", "x": 10, "y": 20, "width": 100, "height": 15},\n'
-        '  {"text": "more text", "x": 10, "y": 40, "width": 95, "height": 15}\n'
+        '  {"text": "example text", "x": 10, "y": 20, "width": 100, "height": 15, "confidence": 0.95},\n'
+        '  {"text": "more text", "x": 10, "y": 40, "width": 95, "height": 15, "confidence": 0.90}\n'
         ']\n'
         "Coordinates should be in pixels. Include all text, even small fragments. "
-        "Include all symbols, punctuation, and line breaks, even if they look like noise."
+        "Include all symbols, punctuation, and line breaks, even if they look like noise. "
+        "Encode special characters properly in JSON as UTF-8 characters. "
+        "For punctuation like dashes, quotes, and apostrophes, use standard ASCII equivalents."
     )
 
     for attempt in range(max_retries):
@@ -81,8 +83,8 @@ def gemini_ocr(image_path, max_retries=3):
             if not isinstance(text_blocks, list):
                 raise ValueError("Response is not a JSON array")
 
-            for block in text_blocks:
-                block['confidence'] = 0.90 
+            # for block in text_blocks:
+            #     block['confidence'] = 0.90 
             return text_blocks
 
         except json.JSONDecodeError as e:
@@ -109,7 +111,7 @@ def fallback_text_extraction(img_pil, width, height):
             return [{
                 "text": extracted_text,
                 "x": 0, "y": 0, "width": width, "height": height,
-                "confidence": 0.85
+                "confidence": 0.65
             }]
     except:
         pass

@@ -35,7 +35,7 @@ def is_likely_headline(block, avg_height):
     is_caps = text.isupper()
     
     # Heuristic 2: Large font (if Tesseract detected it correctly)
-    is_tall = block["bbox"][3] > (avg_height * 1.3)
+    is_tall = block["bbox"]["height"] > (avg_height * 1.3)
 
     # Heuristic 3: Common 1880s sections
     is_common_section = any(word in text.upper() for word in ["NOTICE", "WANTED", "FOR SALE", "BIRTHS", "MARRIED"])
@@ -52,11 +52,10 @@ def group_into_articles(blocks):
         return []
 
     # Sort by column, then by Y position
-    # blocks[bbox] is [x, y, w, h]
-    sorted_blocks = sorted(blocks, key=lambda b: (b.get("col", 0), b["bbox"][1]))
+    sorted_blocks = sorted(blocks, key=lambda b: (b.get("col", 0), b["bbox"]["y"]))
 
     # Calculate average line height for the page to use in heuristics
-    avg_h = sum(b["bbox"][3] for b in sorted_blocks) / len(sorted_blocks)
+    avg_h = sum(b["bbox"]["height"] for b in sorted_blocks) / len(sorted_blocks)
 
     articles = []
     current_article = None
@@ -81,7 +80,7 @@ def group_into_articles(blocks):
             # RULE 3: Vertical Gap (approx 2.5x line height)
             else:
                 # y_gap = current_y - (prev_y + prev_height)
-                gap = block["bbox"][1] - (prev_block["bbox"][1] + prev_block["bbox"][3])
+                gap = block["bbox"]["y"] - (prev_block["bbox"]["y"] + prev_block["bbox"]["height"])
                 if gap > (avg_h * 2.5):
                     start_new = True
 
@@ -101,7 +100,7 @@ def group_into_articles(blocks):
                 "headline": headline,
                 "blocks": [block],
                 "column": block.get("col"),
-                "y_start": block["bbox"][1]
+                "y_start": block["bbox"]["y"]
             }
         else:
             current_article["blocks"].append(block)
@@ -111,6 +110,8 @@ def group_into_articles(blocks):
     return articles
 
 def main():
+    RETAIN_LINES = True  # Set to True to preserve line breaks in full_text
+
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Segment OCR output into articles')
     parser.add_argument('--input', type=str, help='Input OCR file name (default: ocr_output_tesseract.jsonl)')
@@ -120,7 +121,7 @@ def main():
     project_root = script_dir.parent
 
     # Use command line argument or default
-    input_filename = args.input if args.input else "ocr_output_tesseract.jsonl"
+    input_filename = args.input if args.input else "ocr_output.jsonl"
     input_file = project_root / "data" / "02_raw" / input_filename
     output_file = project_root / "data" / "03_processed" / "articles.json"
     output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -136,6 +137,10 @@ def main():
     with open(input_file, 'r', encoding='utf-8') as f:
         for line in f:
             entry = json.loads(line)
+            # blocks[bbox] is [x, y, w, h]
+            if isinstance(entry["bbox"], list):
+                bbox = entry["bbox"]
+                entry["bbox"] = {"x": bbox[0], "y": bbox[1], "width": bbox[2], "height": bbox[3]}
             # Create a unique key for each page of each PDF
             page_key = (entry['pub'], entry['page'])
             data_by_page[page_key].append(entry)
@@ -152,13 +157,16 @@ def main():
         articles = group_into_articles(blocks)
 
         for art_idx, art in enumerate(articles, 1):
-            full_text = " ".join(b["text"] for b in art["blocks"]).strip()
+            if RETAIN_LINES:
+                full_text = "\n".join(b["text"] for b in art["blocks"]).strip()
+            else:
+                full_text = " ".join(b["text"] for b in art["blocks"]).strip()
 
             # Calculate aggregate bounding box for the whole article
-            all_x = [b["bbox"][0] for b in art["blocks"]]
-            all_y = [b["bbox"][1] for b in art["blocks"]]
-            all_x_end = [b["bbox"][0] + b["bbox"][2] for b in art["blocks"]]
-            all_y_end = [b["bbox"][1] + b["bbox"][3] for b in art["blocks"]]
+            all_x = [b["bbox"]["x"] for b in art["blocks"]]
+            all_y = [b["bbox"]["y"] for b in art["blocks"]]
+            all_x_end = [b["bbox"]["x"] + b["bbox"]["width"] for b in art["blocks"]]
+            all_y_end = [b["bbox"]["y"] + b["bbox"]["height"] for b in art["blocks"]]
 
             article_entry = {
                 "article_id": f"{pub_name}_p{page_num}_a{art_idx:03d}",
