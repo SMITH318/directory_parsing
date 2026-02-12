@@ -6,25 +6,37 @@ Modified for JSONL output and memory efficiency.
 
 import json
 import gc
-import cv2
+#import cv2
 import numpy as np
 from pathlib import Path
 import google.generativeai as genai
 from PIL import Image
 import os
 import time
+import pandas as pd
 
-# --- Gemini API Configuration ---
+import logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+  filename='02_gemini.log', 
+  filemode='a', 
+  encoding='utf-8', 
+  level=logging.WARNING) ## <=================== Change logging level here
+
+# --- Gemini API Configuration --- Don't share ######################
 API_KEY = 'AIzaSyDn9pDuQrolbxHrK28gR9qLxnPzPb8yc7I' #os.getenv('GEMINI_API_KEY', 'YOUR_API_KEY')
+model_name ='gemini-flash-latest'
 
 if API_KEY == 'YOUR_API_KEY' or not API_KEY:
     print("ERROR: Gemini API key is not set.")
+    logger.error("ERROR: Gemini API key is not set.")
     exit(1)
 
 # Initialize Gemini
 print("Initializing Gemini for OCR...")
+logger.info(f"Initializing Gemini for OCR... with {model_name}")
 genai.configure(api_key=API_KEY)
-model = genai.GenerativeModel('gemini-flash-latest')
+model = genai.GenerativeModel(model_name)
 
 class NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -39,6 +51,7 @@ def gemini_ocr(image_path, max_retries=3):
         w, h = img_pil.size
     except Exception as e:
         print(f"    Error opening image {image_path}: {e}")
+        logger.error(f"Error opening image {image_path}: {e}")
         return []
 
     # prompt = (
@@ -83,25 +96,29 @@ def gemini_ocr(image_path, max_retries=3):
             if not isinstance(text_blocks, list):
                 raise ValueError("Response is not a JSON array")
 
-            # for block in text_blocks:
+            for block in text_blocks:
             #     block['confidence'] = 0.90 
+                if block['confidence'] < 0.90:
+                    logger.warning(f"low confidence ({block['confidence']}) produced `{block['text']}` in {image_path}")
             return text_blocks
 
         except json.JSONDecodeError as e:
             print(f"\n    Warning: JSON parse error (attempt {attempt + 1}/{max_retries})")
+            logger.warning(f"JSON parse error (attempt {attempt + 1}/{max_retries}) with {image_path}")
             if attempt == max_retries - 1:
-                return fallback_text_extraction(img_pil, w, h)
+                return fallback_text_extraction(image_path, img_pil, w, h)
             time.sleep(1)
         except Exception as e:
             print(f"\n    Warning: Gemini API error (attempt {attempt + 1}/{max_retries}): {e}")
+            logger.warning(f"Gemini API error (attempt {attempt + 1}/{max_retries}) with {image_path}: {e}")
             if attempt == max_retries - 1:
-                return fallback_text_extraction(img_pil, w, h)
+                return fallback_text_extraction(image_path, img_pil, w, h)
             time.sleep(2 ** attempt)
-
     return []
 
-def fallback_text_extraction(img_pil, width, height):
+def fallback_text_extraction(image_path, img_pil, width, height):
     """Fallback method when structured extraction fails."""
+    logger.warning(f"Using fallback extraction for {image_path}")
     try:
         simple_prompt = "Extract all text from this image. Return only the text, nothing else."
         response = model.generate_content([simple_prompt, img_pil])
@@ -130,6 +147,7 @@ def main():
 
     if not metadata_path.exists():
         print(f"Error: Run preprocess.py first. Missing: {metadata_path}")
+        logger.error(f"Error: Run preprocess.py first. Missing: {metadata_path}")
         return
 
     with open(metadata_path, 'r') as f:
@@ -138,25 +156,39 @@ def main():
     print(f"Starting OCR. Output will be saved to: {output_file}")
 
     # 2. Process each PDF
+    df_done = pd.read_json(output_file, lines=True)
     with open(output_file, 'a', encoding='utf-8') as f_out:
         for pdf_meta in all_metadata:
             pdf_name = pdf_meta['source_pdf']
             print(f"\nOCRing Snippets for: {pdf_name}")
+            logger.info(f"\nOCRing Snippets for: {pdf_name}")
 
             for page_meta in pdf_meta['pages']:
                 page_num = page_meta['page_num']
                 print(f"  Page {page_num}...", end="", flush=True)
-                
+                logger.info(f"  Page {page_num}...")
+
                 page_blocks = []
 
                 # Process each snippet (article)
                 for snip in page_meta['snippets']:
+                    col_idx = snip.get('col_idx', snip.get('column', 0))
+                    print(f"{col_idx}.", end="", flush=True)
+                    if ((df_done['pub'] == pdf_name) & 
+                          (df_done['page'] == page_num) &
+                          (df_done['col'] == col_idx)).any():
+                        logger.info(f"Previously processed column {col_idx}")
+                        print(f"Previously processed column {col_idx}", end=" ", flush=True)
+                        continue
                     snippet_image_path = snip['path']
 
                     if not Path(snippet_image_path).exists():
+                        logger.error(f"Image file missing: {snippet_image_path}")
                         continue
 
                     gemini_output = gemini_ocr(snippet_image_path)
+                    if not gemini_output or len(gemini_output) == 0:
+                        logger.error(f"Failed to parse {snippet_image_path}")
 
                     for block in gemini_output:
                         try:
@@ -164,7 +196,7 @@ def main():
                             entry = {
                                     "pub": pdf_name,
                                     "page": page_num,
-                                    "col": snip.get('col_idx', snip.get('column', 0)),
+                                    "col": col_idx,
                                     "text": block['text'].strip(),
                                     "conf": round(block.get('confidence', 0.90), 4),
                                     "bbox": {
@@ -213,6 +245,7 @@ def main():
             gc.collect()
 
     print(f"\n✓ OCR Process Complete. Data in: {output_file}")
+    logger.error(f"\n✓ OCR Process Complete. Data in: {output_file}")
 
 if __name__ == "__main__":
     main()
