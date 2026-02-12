@@ -27,14 +27,14 @@ logging.basicConfig(
   encoding='utf-8', 
   level=logging.WARNING) ## <=================== Change logging level here
 
-# --- Gemini API Configuration --- Don't share ######################
-API_KEY = 'AIzaSyDn9pDuQrolbxHrK28gR9qLxnPzPb8yc7I' #os.getenv('GEMINI_API_KEY', 'YOUR_API_KEY')
+# --- Gemini API Configuration --- 
+API_KEY = os.getenv('GEMINI_API_KEY', 'YOUR_API_KEY')
 model_name ='gemini-flash-latest'
 
-# if API_KEY == 'YOUR_API_KEY' or not API_KEY:
-#     print("ERROR: Gemini API key is not set.")
-#     logger.error("ERROR: Gemini API key is not set.")
-#     exit(1)
+if API_KEY == 'YOUR_API_KEY' or not API_KEY:
+    print("ERROR: Gemini API key is not set.")
+    logger.error("ERROR: Gemini API key is not set.")
+    exit(1)
 
 # Initialize Gemini
 print("Initializing Gemini for OCR...")
