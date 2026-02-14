@@ -12,7 +12,7 @@ LineType = Enum('LineType', 'UNKNOWN, STATE, CITY, DOC_START, DOC_TO_ADDR, DOC_T
 STATE_REGEX=r'(?P<state>[A-Z\s]+)'
 
 # "City, XXX,XXX, County.
-CITY_COUNTY_REGEX=r'(?P<city>[a-zA-Z\s.,()\']+),\s?(((?P<population>[0-9,]+?)|-),\s?)?(?P<county>[a-zA-Z().\s]+)'
+CITY_COUNTY_REGEX=r'(?P<city>[a-zA-Z\s.,()\']+),\s?(((?P<population>[0-9,]+?)|-),\s?)?(?P<county>[a-zA-Z().\s-]+)'
 
 #L*,*1*,*L. - at least one letter, followed by a comma, followed by a number, followed by a comma, followed by a letter (and an optional period)
 LOOSE_CITY_COUNTY_REGEX=r'\w.+?,.+?\d.+?,.+?\w.+?'
@@ -36,7 +36,7 @@ RD_ADDRESS_REGEX=r'(R. ?D.?[1-9]?)'
 HOUR_RANGE_REGEX=r'(([1-9][0-9]?(\s?;30)?[.-]\s?[1-9][0-9]?(\s?;30)?)|((until|after)\s?[1-9][0-9]?))'
 HOURS_REGEX= r'((?P<hours>'+HOUR_RANGE_REGEX+r'([,;]\s?'+HOUR_RANGE_REGEX+'){0,2});? ?)?'
 SOCIETY_REGEX = r'(\((?P<societies>[A-G][1-9][A-G0-9,]*?)\);? ?)?'
-ONE_SPECIALTY_REGEX = r"(S|Ob|G|ObG|Or|Pr|Op|A|LR|ALR|OALR|U|D|Pd|N|P|NP|I|l|T|Anes|CP|R|Path|Bact)[*★]?"
+ONE_SPECIALTY_REGEX = r"(S|Ob|G|ObG|Or|Pr|Op|A|LR|ALR|OALR|U|D|Pd|N|P|NP|I|l|T|Anes|CP|R|Path|Bact|PH)[*★]?"
 SPECIALTY_REGEX = r'((?P<specialty>'+ONE_SPECIALTY_REGEX+'(, ?'+ONE_SPECIALTY_REGEX+')*);? ?)?'
 COMMISSION_REGEX = r'(?P<commission>▼[GN]?)?'
 
@@ -44,7 +44,7 @@ COMMISSION_REGEX = r'(?P<commission>▼[GN]?)?'
 # "LAST, FIRST [(col.)][BIRTH][+]-SCHOOL
 DOC_ENTRY_REGEX_TO_SCHOOL = (
     r'(?P<last_name>[a-zA-Z \'1]+),\s(?P<first_name>[a-zA-Z.,\s]+)\s?((?P<col>\(col\.\))\s?)?'+
-    '('+BIRTH_REGEX+r'\s?)?(?P<break>([+*@⊕]?|-?[EH]?)\s?-)\s?'+
+    '('+BIRTH_REGEX+r'\s?)?(?P<break>([+*@⊕]|-?[EH]|-?P-M)?\s?-)\s?'+
     SCHOOLS_REGEX+r';?\s?'
 )
 DOC_ENTRY_REGEX_TO_ADDRESS = (
