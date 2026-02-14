@@ -1,3 +1,4 @@
 data/*
 *.log
 *.pyc
+scripts/__pycache__/AMD_1918_util_lib.cpython-314.pyc
