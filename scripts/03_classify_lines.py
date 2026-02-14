@@ -21,6 +21,7 @@ MAX_LINES_TO_AGG = 4
 RETAIN_LINES = False  # Whether to  preserve line breaks (\n) in full_text or convert them to spaces
 ASSUME_NO_AGG = True # with non-test runs, whether to assume not to aggregate, otherwise prompts
 RUN_TESTS = False # Whether to run tests or process data via main()
+################################################## constants ##################################################
 
 def prompt_lines_to_agg(agged_line, assume_no_agg):
     """Prompt the user for the number of lines to aggregate or assume no aggregation."""
@@ -227,7 +228,7 @@ if RUN_TESTS:
         (["Edwards, James A. (b'64)-Tenn.6,'88; not", "in practice"], [2]),
         (["GLAZE, ANDREW LEWIS, JR. (b'88)⊕-", "Tenn.5,'12; (l 13); D; ▼"], [2]),
         (["DRAKE, JOHN HODGES, SR. (b'45)⊕-", "Ga.5,'67; (l 81)"], [2]),
-        (["LEVI, IRWIN PALMER (b'87)⊕-Pa.1,'09;", "(l 09); 1329 Quintard Ave.; office, Hill", "Bldg.; 10-12, 2:30-5; R"], [3]), # greedy addresses
+        (["LEVI, IRWIN PALMER (b'87)⊕-Pa.1,'09;", "(l 09); 1329 Quintard Ave.; office, Hill", "Bldg.; 10-12, 2;30-5; R"], [3]), # greedy addresses
         (["Jones, Lee G. (b'73)-Ga.1,'96, Tenn.11,'98;", "(l t)"], [2]), # 2 schools
         (["GOGGANS, JAMES ADRIAN (b'54)-N.Y.5,", "'77; (l 82); (A628); S"], [2]), # associations
         (["Kyle, Wm. Bailey-Ala.2,'89; (l 89); R.D", "Milhouse, Wm. A.-Tenn.1,'68; (♁); R.D", "Moore, Elisha B.-◊; (l 78); not in practice"], [1,1,1]),

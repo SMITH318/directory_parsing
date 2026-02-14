@@ -24,20 +24,22 @@ REPL = {
 RE_MAP = {
     # remove control chars (keep newline/tab handled outside JSON strings)
     re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]"): "",
-    #replace all white space, including multiples with single space
-    re.compile(r"[\s]+"): " ",
+    #replace all white space with a space
+    re.compile(r"\s"): " ",
     #replace multiple dashes and dash-like characters with single dash
-    re.compile(r"[-–—]+"): "-",
-    #replace colons with semi-colons
-    #s = re.sub(':', ';', s)
+    re.compile(r"[-–—]"): "-",
+    #replace any colons with semi-colons
+    re.compile(':'): ';',
     #replace commas and underscores with periods
     #text=re.sub('[,_]', '.', text)
     #cleanup '(l'89)' format - often 'l' appears as 'I' or '1', space not always there
     re.compile(r"\([lI1]?[ ']?(?P<year>[0-9]{2})\)"): r'(l \g<year>)',
     #cleanup '(l †)' to '(l t)' format - often 'l' appears as 'I' or '1', space not always there, 't' sometimes f
     re.compile(r'\([lI1] ?[tf†]\)'): r'(l t)',
-    #repleace unbundled 1/2 with single character
+    #replace unbundled 1/2 with single character
     re.compile(r' ?1/2'): r"½",
+    #reduce multiples of any non-word character (space, punctuation) to single
+    re.compile(r'(?P<char>\W)\1+'): r'\g<char>'
 }
 
 def clean_text(s: str) -> str:
@@ -71,7 +73,7 @@ def clean_lines(filename_in, filename_out):
                 out_file.write(json.dumps(entry, ensure_ascii=False) + '\n')
                 
                 # what wierd characters haven't I dealt with?
-                match = re.search(r"[^\da-zA-Z(),.'▼★;:* &◊⊕♁½-]", entry['text']) 
+                match = re.search(r"[^\da-zA-Z(),.'▼★;* &◊⊕♁½-]", entry['text']) 
                 if match:
                     unexpected_chars += match.group(0)
  
@@ -101,5 +103,6 @@ if True:
 
     clean_lines(input_file, output_file)
 else: #tests
+    # print("'"+re.compile(r'(?P<char>\W)\1+').sub(r'\g<char>', ".;;... ''.")+"'")
     clean_lines('clean_tests.txt', 'clean_tests_out.txt')
     
