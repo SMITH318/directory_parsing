@@ -1,0 +1,163 @@
+import csv
+from AMD_1918_util_lib import *
+import pandas as pd
+from pathlib import Path
+
+ask_if_city=True
+
+recordsDictList = []
+curCityDict = {}
+cityDictList = []
+stateList=[]
+curState=''
+getLine = True
+nextLine = ''
+line = ''
+badLineList = []
+
+def report_error(error, line, line_num):
+    print("*** error: ", error, " line ", line_num, " '", line, "'", sep="")
+    badLineList.append(line+'\n')
+
+script_dir = Path(__file__).resolve().parent
+project_root = script_dir.parent
+
+# Use command line argument or default
+input_file = project_root / "data" / "03_processed_batch" / "entries_segmented.csv"
+output_dir = project_root / "data" / "04_extracted_entries" 
+output_file = output_dir / "amd_1918_doc_entries.csv"
+cities_file = output_dir / "amd_1918_city_entries.csv"
+errout_file = output_dir / "amd_1918_errors.txt"
+output_dir.mkdir(parents=True, exist_ok=True)
+
+if not input_file.exists():
+    print(f"Error: {input_file} not found.")
+    exit(1)
+
+entries = pd.read_csv(input_file, encoding='utf-8')
+
+for line_num, entry in entries.iterrows():
+
+    #remove start/end whitespace
+    #print("line in: '", line, "'", sep="")
+    line = entry["full_text"].strip()
+    #print("line stripped: '", line, "'", sep="")
+    # either each line is state name OR city info OR doc record
+    line_type = get_line_type(line)
+    if line_type != entry["lineType"]:
+        print("WARNING: mismatch linetype")
+    #print(line_type)
+    if line_type == LineType.STATE:
+        info=get_state(line)
+        curState = info['state'].upper()
+        stateList.append(curState)
+    elif line_type == LineType.CITY:
+        info=get_city(line)
+        #check county for PO or RFD info
+        county=info['county'].upper()
+        if county[-1] == '.':
+            county=county[:-1]
+        matched = re.match("(?P<county>[\w' ]+) \((?P<rfd>R\.F\.D\.\. )?(?P<ref>[\w ]+)(?P<po> P\.O\.)?\)", county)
+        post_reference = ''
+        post_reference_type = ''
+        if matched:
+            #print('matched post ref:', county)
+            county=matched['county']
+            post_reference=matched['ref']
+            post_reference_type= 'PO' if matched['po'] is not None else 'RFD'
+        population = info['population']
+        # remove '.'s in pop num
+        if population is not None:
+            population = population.replace('.', '')
+        curCityDict = dict(city=info['city'].upper(),
+                            population=population,
+                            county=county.upper(),
+                            state=curState,
+                            post_reference=post_reference,
+                            post_reference_type=post_reference_type
+                            )
+        cityDictList.append(curCityDict)
+    elif line_type == LineType.DOC_FULL:
+        info=get_full_doctor(line)
+        full_name = info['last_name']+ ', ' + info['first_name']
+        full_name = full_name.replace('1','I')
+        n_noncaps = 0
+        for c in full_name:
+            if c.isalpha() and c.islower():
+                n_noncaps+=1
+        default_sch_info = 'NA' if info['no_sch_info'] is None else 'UNKNOWN'
+        school_state= default_sch_info if info['sch_state'] is None else info['sch_state'].upper(),
+        if school_state == '0':
+            school_state = 'O'
+        grad_year=default_sch_info
+        if info['sch_year'] is not None:
+            grad_year=info['sch_year']
+            if int(grad_year) <= 6: # <= directory year (06)
+                grad_year = '19' + grad_year
+            else:
+                grad_year = '18' + grad_year
+        license_year='NA'
+        if info['lic_year'] is not None:
+            if info['lic_year'][0] in "tf":
+                license_year= 'UNKNOWN'
+            else:
+                license_year= info['lic_year']
+        recordsDict = dict(name= full_name.upper(),
+                            society_member=n_noncaps<2, #allow for Mc style
+                            col=info['col'] is not None,
+                            birth_year='NA' if info['birth'] is None else info['birth'],
+                            AMA_member=len(info['break']) > 0 and info['break'][0] in "+*",
+                            school_state=school_state,
+                            school_number=default_sch_info if info['sch_id'] is None else info['sch_id'].replace('l','1'),
+                            grad_year=grad_year,
+                            license_year=license_year,
+                            not_in_practice=info['no_practice'] is not None,
+                            address='NA' if info['addr'] is None else info['addr'],
+                            office='NA' if info['office'] is None else info['office'],
+                            city=curCityDict['city'],
+                            county=curCityDict['county'],
+                            state=curCityDict['state'],
+                            hours='NA' if info['hours'] is None else '"'+info['hours']+'"'
+                            )
+        #print(recordsDict)
+        recordsDictList.append(recordsDict)
+    else:
+        # do some self-checks
+        # is this a partial doc? then skip to reporting
+        if line_type != LineType.DOC_START:
+            loose_city = is_loose_city(line)
+            #print('loose_city', loose_city)
+            # if its a loose city and user query is on, ask the user
+            user_agg_key = 'N' if (not loose_city or not ask_if_city) else input(line+'\nCity line? (Y/N)\n')
+            if user_agg_key[0] in ['Y', 'y']:
+                # if it's probably a malformed city, assign an id so it's doctors don't get misattributed
+                city_tmp_name='CITY_' + str(len(cityDictList))
+                curCityDict = dict(city=city_tmp_name,
+                                    population='',
+                                    county='',
+                                    state=curState)
+                cityDictList.append(curCityDict)
+                line=city_tmp_name + ':' + line #record id for line
+        report_error('unexpected line type:', line, line_num)
+
+#print unparsable lines
+print("Errors Found:", len(badLineList))
+with open(errout_file, 'w', encoding = 'utf-8', newline='') as errfile:
+    errfile.writelines(badLineList)
+
+#print city entries
+#print(cityDictList)
+print("Cities Found:", len(cityDictList))
+with open(cities_file, 'w', encoding = 'utf-8', newline='') as csvfile:
+    writer = csv.DictWriter(csvfile, fieldnames=cityDictList[0].keys())
+    writer.writeheader()
+    for city in cityDictList:
+        writer.writerow(city)
+
+#print hospital entries
+print("Doctor Entries Found:", len(recordsDictList))
+with open(output_file, 'w', encoding = 'utf-8', newline='') as csvfile:
+    writer = csv.DictWriter(csvfile, fieldnames=recordsDictList[0].keys())
+    writer.writeheader()
+    for record in recordsDictList:
+        writer.writerow(record)
