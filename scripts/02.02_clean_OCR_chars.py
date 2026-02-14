@@ -6,25 +6,39 @@ from pathlib import Path
 
 # simple mapping of rare/unusual -> common
 REPL = {
-    "“": '"', "”": '"', "„": '"', "«": '"', "»": '"',
-    "‘": "'", "’": "'", "‚": ",",
-    "—": "-", "–": "-", "−": "-",
-    "…": "...",
-    "\u00A0": " ",  # NBSP
-    "\u200B": "", "\u200C": "", "\u200D": "", "\u200E": "", "\u200F": "",
-    "·": ".", "•": "-", "•": "-", "×": "x",
-    "°": "*",  "°": "*",
-    "©": "@", "⋄": "*",
-    "◆": "◊",
-    "▼": "V", "▽": "V", "ṽ": "V", "Ṿ": "V", "Ṿ":"V", "Ý":"V", '¥':"V", "Ÿ":"V"
+    # "“": '"', "”": '"', "„": '"', "«": '"', "»": '"',
+    # "‘": "'", "’": "'", "‚": ",",
+    # "—": "-", "–": "-", "−": "-",
+    # "…": "...",
+    # "\u00A0": " ",  # NBSP
+    # "\u200B": "", "\u200C": "", "\u200D": "", "\u200E": "", "\u200F": "",
+    # "·": ".", "•": "-", "•": "-", "×": "x",
+    # "°": "*",  "°": "*",
+    # "©": "@", "⋄": "*",
+    # "◆": "◊",
+    # "▼": "V", "▽": "V", "ṽ": "V", "Ṿ": "V", "Ṿ":"V", "Ý":"V", '¥':"V", "Ÿ":"V"
+    'δ': '♁'
 }
 
 # compile regexes
-CONTROL_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]")
-MULTI_WS_RE = re.compile(r"[\s]+")
-MULTI_DASH_RE = re.compile(r"[-–—]+")
-L_YEAR_IN_RE = re.compile(r"\([lI1]?[ ']?(?P<year>[0-9]{2})\)")
-L_T_RE = re.compile(r'\([lI1] ?[tf]\)')
+RE_MAP = {
+    # remove control chars (keep newline/tab handled outside JSON strings)
+    re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]"): "",
+    #replace all white space, including multiples with single space
+    re.compile(r"[\s]+"): " ",
+    #replace multiple dashes and dash-like characters with single dash
+    re.compile(r"[-–—]+"): "-",
+    #replace colons with semi-colons
+    #s = re.sub(':', ';', s)
+    #replace commas and underscores with periods
+    #text=re.sub('[,_]', '.', text)
+    #cleanup '(l'89)' format - often 'l' appears as 'I' or '1', space not always there
+    re.compile(r"\([lI1]?[ ']?(?P<year>[0-9]{2})\)"): r'(l \g<year>)',
+    #cleanup '(l †)' to '(l t)' format - often 'l' appears as 'I' or '1', space not always there, 't' sometimes f
+    re.compile(r'\([lI1] ?[tf†]\)'): r'(l t)',
+    #repleace unbundled 1/2 with single character
+    re.compile(r' ?1/2'): r"½",
+}
 
 def clean_text(s: str) -> str:
     # normalize unicode compatibility
@@ -35,27 +49,17 @@ def clean_text(s: str) -> str:
     for a, b in REPL.items():
         if a in s:
             s = s.replace(a, b)
-    # remove control chars (keep newline/tab handled outside JSON strings)
-    s = CONTROL_RE.sub("", s)
-    #replace all white space, including multiples with single space
-    s = MULTI_WS_RE.sub(" ", s)
-    #replace multiple dashes and dash-like characters with single dash
-    s = MULTI_DASH_RE.sub("-", s)
-    #replace colons with semi-colons
-    s = re.sub(':', ';', s)
-    #replace commas and underscores with periods
-    #text=re.sub('[,_]', '.', text)
-    #cleanup '(l'89)' format - often 'l' appears as 'I' or '1', space not always there
-    s = L_YEAR_IN_RE.sub(r'(l \g<year>)', s)
-    #cleanup '(l t)' format - often 'l' appears as 'I' or '1', space not always there, 't' sometimes f
-    s = L_T_RE.sub(r'(l t)', s)
+    # regex replacements
+    for a, b in RE_MAP.items():
+        s = a.sub(b, s)
+
     # trim start/end whitespace (again)
     s = s.strip()
     return s
 
 def clean_lines(filename_in, filename_out):
-    def strip_str(string):
-        return string.strip(' \n\t')# trim start/end whitespace as well as common OCR blips
+    # def strip_str(string):
+    #     return string.strip(' \n\t')# trim start/end whitespace as well as common OCR blips
     
     unexpected_chars =''
     with open(filename_in, 'r',encoding="utf-8") as f:
@@ -67,7 +71,7 @@ def clean_lines(filename_in, filename_out):
                 out_file.write(json.dumps(entry, ensure_ascii=False) + '\n')
                 
                 # what wierd characters haven't I dealt with?
-                match = re.search(r"[^\da-zA-Z(),.'+*: &@◊-]", text) 
+                match = re.search(r"[^\da-zA-Z(),.'▼★;:* &◊⊕♁½-]", entry['text']) 
                 if match:
                     unexpected_chars += match.group(0)
  
@@ -81,6 +85,8 @@ def clean_lines(filename_in, filename_out):
     unexpected_chars = set(unexpected_chars)
     if len(unexpected_chars) > 0:
         print(len(unexpected_chars),'unexpected characters found: ', repr(unexpected_chars))
+    else:
+        print("No expected characters!!")
 
 # __main__
 if True:
@@ -88,8 +94,10 @@ if True:
     script_dir = Path(__file__).parent if '__file__' in dir() else Path.cwd()
     project_root = script_dir if (script_dir / "data").exists() else script_dir.parent
 
-    input_file = project_root / "data" / "02_raw" / "ocr_output_reviewed.jsonl"
-    output_file = project_root / "data" / "02_raw" / "ocr_output_auto_cleaned.jsonl"
+    raw_folder = project_root / "data" / "02_raw_batch"
+
+    input_file = raw_folder / "ocr_output_reviewed.jsonl"
+    output_file = raw_folder / "ocr_output_auto_cleaned.jsonl"
 
     clean_lines(input_file, output_file)
 else: #tests

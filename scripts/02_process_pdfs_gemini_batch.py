@@ -4,6 +4,8 @@ OCR Processing Script - Gemini Vision Edition
 Modified for new API and batching.
 Processes preprocessed PDF snippets using Gemini Vision API to extract text and bounding boxes.
 """
+# TODO: Change to access files from Cloud Bucket
+# TODO: Cache system instruction/model prompt for reuse, more throughput
 
 import datetime
 import json
@@ -25,7 +27,7 @@ logging.basicConfig(
   filename='02_gemini_batch.log', 
   filemode='a', 
   encoding='utf-8', 
-  level=logging.WARNING) ## <=================== Change logging level here
+  level=logging.DEBUG) ## <=================== Change logging level here
 
 # --- Gemini API Configuration --- 
 API_KEY = os.getenv('GEMINI_API_KEY', 'YOUR_API_KEY')
@@ -38,6 +40,7 @@ if API_KEY == 'YOUR_API_KEY' or not API_KEY:
 
 # Initialize Gemini
 print("Initializing Gemini for OCR...")
+#print(f"Key: {API_KEY}")
 logger.info(f"Initializing Gemini for OCR... with {model_name}")
 client = genai.Client(api_key=API_KEY)
 
@@ -209,7 +212,7 @@ def gemini_extract_snippet(key: str, json_text: str) -> tuple[dict[str, int, int
 
     try:
         json_response = json.loads(json_text)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
         logger.error(f"Failed to parse JSON response for key {key}")
         return (info, [])
 
@@ -226,11 +229,10 @@ def gemini_extract_snippet(key: str, json_text: str) -> tuple[dict[str, int, int
 
 def process_batch_ocr_output(batch_job: types.BatchJob, offsets_file: Path, result_file_local: Path, output_file: Path) -> bool:
     """Process the output of a Gemini Vision batch OCR job. Return True if successful (no errors), False otherwise."""
-    successful = True
     if batch_job.state.name != 'JOB_STATE_SUCCEEDED':
         print(f"Job did not succeed, unexpected final state: {batch_job.state.name}")
         logger.error(f"Job did not succeed, unexpected final state: {batch_job.state.name}")
-        successful = False
+        return False
     else:
         # The output is in another file. Download and parse it.
         result_file_name = batch_job.dest.file_name
@@ -245,47 +247,59 @@ def process_batch_ocr_output(batch_job: types.BatchJob, offsets_file: Path, resu
         with open(result_file_local, 'w', encoding = 'utf-8') as f:
             f.write(file_content)
             logger.error(f"Downloaded results file {result_file_local}")
+        return process_batch_ocr_output_content(file_content, offsets_file, output_file)
 
-        offsets_file_df = pd.read_csv(offsets_file)
+def process_batch_ocr_output_file(content_file: Path, offsets_file: Path, output_file: Path) -> bool:
+    with open(content_file, 'r', encoding='utf-8') as f_in:
+        return process_batch_ocr_output_content(f_in.read(), offsets_file, output_file)
 
-        # The result file is also a JSONL file. Parse each line.
-        with open(output_file, 'a', encoding='utf-8') as f_out:
-            for line in file_content.splitlines():
-                if line:
-                    parsed_response = json.loads(line)
-                    # Pretty-print the JSON for readability
-                    logger.debug(json.dumps(parsed_response, indent=2))
-                    logger.debug("-" * 20)
+def process_batch_ocr_output_content(content: str, offsets_file: Path, output_file: Path) -> bool:
+    successful = True
+    offsets_file_df = pd.read_csv(offsets_file)
 
-                    info, gemini_output = gemini_extract_snippet(
-                        parsed_response["key"], 
-                        parsed_response["response"]["candidates"][0]["content"]["parts"][0]["text"]
-                    )
+    # The result file is also a JSONL file. Parse each line.
+    with open(output_file, 'a', encoding='utf-8') as f_out:
+        for line in content.splitlines():
+            if line:
+                parsed_response = json.loads(line)
+                # Pretty-print the JSON for readability
+                logger.debug(json.dumps(parsed_response, indent=2))
+                logger.debug("-" * 20)
 
-                    # find offsets for this snippet
-                    offset_row = offsets_file_df[offsets_file_df['key'] == parsed_response["key"]].iloc[0]
+                finish_reason = parsed_response["response"]["candidates"][0]["finishReason"]
+                if finish_reason != "STOP":
+                    print(f"Unexpected finishReason: {finish_reason} in {parsed_response['key']}")
+                    logger.warning(f"Unexpected finishReason: {finish_reason} in {parsed_response['key']}")
 
-                    for block in gemini_output:
-                        try:
-                            entry = {
-                                    "pub": info["state"],
-                                    "page": info["page"],
-                                    "col": info["column"],
-                                    "text": block["text"].strip(),
-                                    "conf": round(block["confidence"], 4),
-                                    "bbox": {
-                                        "x": float(block["x"]) + offset_row['x_offset'],
-                                        "y": float(block["y"]) + offset_row['y_offset'],
-                                        "width": float(block["width"]),
-                                        "height": float(block["height"])
-                                    }
+                info, gemini_output = gemini_extract_snippet(
+                    parsed_response["key"], 
+                    parsed_response["response"]["candidates"][0]["content"]["parts"][0]["text"]
+                )
+
+                # find offsets for this snippet
+                offset_row = offsets_file_df[offsets_file_df['key'] == parsed_response["key"]].iloc[0]
+
+                for block in gemini_output:
+                    try:
+                        entry = {
+                                "pub": info["state"],
+                                "page": info["page"],
+                                "col": info["column"],
+                                "text": block["text"].strip(),
+                                "conf": round(block["confidence"], 4),
+                                "bbox": {
+                                    "x": float(block["x"]) + offset_row['x_offset'],
+                                    "y": float(block["y"]) + offset_row['y_offset'],
+                                    "width": float(block["width"]),
+                                    "height": float(block["height"])
                                 }
-                            f_out.write(json.dumps(entry, cls=NumpyEncoder, ensure_ascii=False) + "\n")
-                            
-                        except Exception as e:
-                            logger.error(f"Error processing block: {block} in snippet {info} ({parsed_response['key']}), error: {e}")
-                            successful = False
-                            continue
+                            }
+                        f_out.write(json.dumps(entry, cls=NumpyEncoder, ensure_ascii=False) + "\n")
+                        
+                    except Exception as e:
+                        logger.error(f"Error processing block: {block} in snippet {info} ({parsed_response['key']}), error: {e}")
+                        successful = False
+                        continue
     return successful
 
 def main(initial_wait_seconds=-1, followup_wait_seconds=-1, max_to_batch = 4):
@@ -406,5 +420,17 @@ if __name__ == "__main__":
     INITIAL_WAIT_SECONDS = 60 * 60 * 10 # 10 hours
     FOLLOWUP_WAIT_SECONDS = 60 * 10    # 10 minutes
     main(initial_wait_seconds=FOLLOWUP_WAIT_SECONDS, followup_wait_seconds=FOLLOWUP_WAIT_SECONDS)
+
+    # setup for testing handling downloaded responses
+    # script_dir = Path(__file__).parent
+    # project_root = script_dir if (script_dir / "data").exists() else script_dir.parent
+    # output_dir = project_root / "data" / "02_raw_batch"
+
+    # offsets_file = output_dir / "snippet_offsets.csv"
+    # result_file_path = output_dir / 'batch_results.jsonl'
+    # output_file = output_dir / "ocr_output.jsonl"
+
+    # process_batch_ocr_output_file(result_file_path, offsets_file, output_file)
+
 
 client.close()
