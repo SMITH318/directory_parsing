@@ -6,15 +6,21 @@ Step 3: Article Segmentation
 - Optimized for Tesseract output and 1880s newspaper layouts.
 """
 
-from operator import index
+#from operator import index
 from AMD_1918_util_lib import *
 import json
-import re
 import argparse
 from pathlib import Path
 from collections import defaultdict
-from datetime import datetime
+#from datetime import datetime
 import csv
+
+
+################################################## constants ##################################################
+MAX_LINES_TO_AGG = 4
+RETAIN_LINES = False  # Whether to  preserve line breaks (\n) in full_text or convert them to spaces
+ASSUME_NO_AGG = True # with non-test runs, whether to assume not to aggregate, otherwise prompts
+RUN_TESTS = False # Whether to run tests or process data via main()
 
 def prompt_lines_to_agg(agged_line, assume_no_agg):
     """Prompt the user for the number of lines to aggregate or assume no aggregation."""
@@ -53,22 +59,34 @@ def group_into_entries(blocks, assume_no_agg=False) -> list[dict]: # [{"linetype
 
     index = 0
     while index < len(sorted_blocks):
-        #agg up to 3 lines until a line fits a pattern
+        #agg up to MAX_LINES_TO_AGG lines until a line fits a pattern
         sub_index = index
         agged_line = []
         current_entry = {"linetype": LineType.UNKNOWN, "blocks": []}
         entry_done = False
-        while sub_index-index < 3 and sub_index+1 < len(sorted_blocks):
+        line_type = None
+        while sub_index-index < MAX_LINES_TO_AGG and sub_index < len(sorted_blocks):
             block = sorted_blocks[sub_index]
             agged_line.append(block["text"])
             current_entry["blocks"].append(block)
 
+            prev_line_type = line_type
             line_type = get_line_type(' '.join(agged_line))
             print(f'Checking aggregated lines: {" ".join(agged_line)} => {line_type}')
             if line_type in [LineType.STATE, LineType.CITY, LineType.DOC_FULL]:
                 # done with entry
                 current_entry["linetype"] = line_type
                 index = sub_index
+                entry_done = True
+                break
+            elif prev_line_type in [LineType.DOC_TO_ADDR, LineType.DOC_TO_OFF]:
+                # aggregating to prev line looked like it could be full doc, and continuing didn't
+                # undo what was added at start of inner, sub_index loop
+                agged_line.pop()
+                current_entry["blocks"].pop()
+                # set appropriate done values
+                current_entry["linetype"] = LineType.DOC_FULL
+                index = sub_index - 1
                 entry_done = True
                 break
             else:
@@ -89,15 +107,23 @@ def group_into_entries(blocks, assume_no_agg=False) -> list[dict]: # [{"linetype
                 #     entry_done = True
                 #     break
                 # else: #next_line doesn't fit pattern, keep agging
-                    
+
+        # didn't match but check if prev was possible LineType.DOC_FULL                    
+        if line_type in [LineType.DOC_TO_ADDR, LineType.DOC_TO_OFF]:
+            # treat as LineType.DOC_FULL
+            current_entry["linetype"] = LineType.DOC_FULL
+            index = sub_index
+            entry_done = True
+
         if not entry_done and len(current_entry["blocks"]) > 0:
+            # print(line_type, sub_index-index, "; len:", len(sorted_blocks))
             # prompt how many lines to keep aggregated
             to_agg = prompt_lines_to_agg(agged_line, assume_no_agg)
             agged_line = agged_line[:to_agg]
             current_entry["blocks"] = current_entry["blocks"][:to_agg]
             index += to_agg - 1
             # prompt line type? <=========================================================
-            current_entry["linetype"] = LineType.UNKNOWN#prompt_line_type(agged_line) # i thinmk unknown is better to mark need to fix later
+            current_entry["linetype"] = LineType.UNKNOWN#prompt_line_type(agged_line) # i think unknown is better to mark need to fix later
             entry_done = True
 
         if entry_done:
@@ -106,8 +132,6 @@ def group_into_entries(blocks, assume_no_agg=False) -> list[dict]: # [{"linetype
     return entries
 
 def main():
-    RETAIN_LINES = True  # Set to True to preserve line breaks in full_text
-
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Segment OCR output into articles')
     parser.add_argument('--input', type=str, help='Input OCR file name (default: ocr_output_tesseract.jsonl)')
@@ -117,9 +141,9 @@ def main():
     project_root = script_dir.parent
 
     # Use command line argument or default
-    input_filename = args.input if args.input else "ocr_output_reviewed.jsonl"
-    input_file = project_root / "data" / "02_raw" / input_filename
-    output_file = project_root / "data" / "03_processed" / "entries_segmented.csv"
+    input_filename = args.input if args.input else "ocr_output_auto_cleaned.jsonl"
+    input_file = project_root / "data" / "02_raw_batch" / input_filename
+    output_file = project_root / "data" / "03_processed_batch" / "entries_segmented.csv"
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     if not input_file.exists():
@@ -144,10 +168,11 @@ def main():
     all_entries = []
 
     # 2. Process each column
+    num_unknown = 0
     for (pub_name, page_num, col_num), blocks in data_by_col.items():
         print(f"Segmenting: {pub_name} - Page {page_num} Column {col_num}")
 
-        entries = group_into_entries(blocks)
+        entries = group_into_entries(blocks, ASSUME_NO_AGG)
 
         for idx, entry in enumerate(entries, 1):
             if RETAIN_LINES:
@@ -160,7 +185,10 @@ def main():
             all_x_end = [b["bbox"]["x"] + b["bbox"]["width"] for b in entry["blocks"]]
             all_y_end = [b["bbox"]["y"] + b["bbox"]["height"] for b in entry["blocks"]]
 
-            entry = {
+            if entry["linetype"] is LineType.UNKNOWN:
+                num_unknown += 1
+
+            entry_out = {
                 "entry_id": f"{pub_name}_p{page_num:03d}_c{col_num:03d}_e{idx:03d}",
                 "source_pdf": pub_name,
                 "page_number": page_num,
@@ -172,7 +200,7 @@ def main():
                 "width": max(all_x_end) - min(all_x),
                 "height": max(all_y_end) - min(all_y)
             }
-            all_entries.append(entry)
+            all_entries.append(entry_out)
 
     # 3. Save to CSV
     with open(output_file, 'w', encoding='utf-8', newline='') as csvfile:
@@ -184,7 +212,54 @@ def main():
             writer.writerow(e)
 
     print(f"\n✓ Success! Extracted {len(all_entries)} entries.")
+    print(f"\tUnknown entries {num_unknown} ({100 * num_unknown / len(all_entries)}%)")
     print(f"Saved to: {output_file}")
 
+if RUN_TESTS:
+    def blockify_lines(lines):
+        return [{"text": l} for l in lines]
+
+    TESTS = [
+        (["OWENS, SEABORN WESLEY-◊; (l 87)", "SCARBROUGH, BEMON CREIGHTON (b'85)-", "Tenn.19,'11; (l 11)"], [1,2]),
+        (["Williams, David Calhoun (b'86)-Tenn.8,", "'11; not in practice; R.D.1; ▼", "ASPEL, 26, JACKSON"], [2,1]),
+        (["Gattis, Henry Franklin-◊; (l 82)", "ATHENS, 1,715, LIMESTONE"], [1,1]),
+        (["DARBY, HENRY ALONZO (b'75)-Ala.4,", "'01; (l 01); R.D"], [2]),
+        (["Edwards, James A. (b'64)-Tenn.6,'88; not", "in practice"], [2]),
+        (["GLAZE, ANDREW LEWIS, JR. (b'88)⊕-", "Tenn.5,'12; (l 13); D; ▼"], [2]),
+        (["DRAKE, JOHN HODGES, SR. (b'45)⊕-", "Ga.5,'67; (l 81)"], [2]),
+        (["LEVI, IRWIN PALMER (b'87)⊕-Pa.1,'09;", "(l 09); 1329 Quintard Ave.; office, Hill", "Bldg.; 10-12, 2:30-5; R"], [3]), # greedy addresses
+        (["Jones, Lee G. (b'73)-Ga.1,'96, Tenn.11,'98;", "(l t)"], [2]), # 2 schools
+        (["GOGGANS, JAMES ADRIAN (b'54)-N.Y.5,", "'77; (l 82); (A628); S"], [2]), # associations
+        (["Kyle, Wm. Bailey-Ala.2,'89; (l 89); R.D", "Milhouse, Wm. A.-Tenn.1,'68; (♁); R.D", "Moore, Elisha B.-◊; (l 78); not in practice"], [1,1,1]),
+        (["KIMBELL, ISHAM (b'84)-Ala.2,'09; (l 09);", "Ob; ▼G", "Kirven, Thos. C.-Ky.4,'93; (l 93)"], [2,1]),
+        (["LACEY, EDWARD PARISH (b'56)⊕-", "Tenn.5,'83; (l 83); 1802, 8th Ave.; office,", "Realty Bldg"], [3]),
+        (["WALLER, GEO. DE ILOACH (b'70)-Tenn.5,", "'99; (l 99); 1710, 4th Ave.; office, 210½", "19th St.; 10-12, 2-4"], [3]),
+    ]
+
 if __name__ == "__main__":
-    main()
+    if RUN_TESTS:
+        any_bad=0
+        for test, group_lens in TESTS:
+            grouped = group_into_entries(blockify_lines(test), assume_no_agg=True)
+            err = False
+            if len(grouped) != len(group_lens):
+                print("\n**bad test: number of groups", len(grouped),"didn't match for '", test, "'")
+                print("\tExpected:", group_lens)
+                err = True
+            else:
+                for i, group in enumerate(grouped):
+                    if len(group["blocks"]) != group_lens[i]:
+                        print("bad test: number in group", len(group["blocks"]), "didn't match for '", test, "'")
+                        print("\tExpected:", group_lens[i])
+                        err = True
+            if err:
+                any_bad+=1
+                print("\tFound blocks:")
+                for group in grouped:
+                    print("\t", group["blocks"])
+                print('\n')
+
+        print('****', any_bad, 'bad tests out of', len(TESTS), '****')
+
+    else:
+        main()
