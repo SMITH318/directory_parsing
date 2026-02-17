@@ -287,12 +287,10 @@ def process_batch_ocr_output_content(content: str, offsets_file: Path, output_fi
                                 "col": info["column"],
                                 "text": block["text"].strip(),
                                 "conf": round(block["confidence"], 4),
-                                "bbox": {
-                                    "x": float(block["x"]) + offset_row['x_offset'],
-                                    "y": float(block["y"]) + offset_row['y_offset'],
-                                    "width": float(block["width"]),
-                                    "height": float(block["height"])
-                                }
+                                "x": block["x"] + offset_row['x_offset'],
+                                "y": block["y"] + offset_row['y_offset'],
+                                "width": block["width"],
+                                "height": block["height"]
                             }
                         f_out.write(json.dumps(entry, cls=NumpyEncoder, ensure_ascii=False) + "\n")
                         

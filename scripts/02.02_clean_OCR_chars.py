@@ -37,7 +37,7 @@ RE_MAP = {
     #cleanup '(l †)' to '(l t)' format - often 'l' appears as 'I' or '1', space not always there, 't' sometimes f
     re.compile(r'\([lI1] ?[tf†]\)'): r'(l t)',
     #replace unbundled 1/2 with single character
-    re.compile(r' ?1/2'): r"½",
+    #re.compile(r' ?1/2'): r"½", # ½ causes problems when sent back to Gemini
     #reduce multiples of any non-word character (space, punctuation) to single
     re.compile(r'(?P<char>\W)\1+'): r'\g<char>'
 }
@@ -73,7 +73,7 @@ def clean_lines(filename_in, filename_out):
                 out_file.write(json.dumps(entry, ensure_ascii=False) + '\n')
                 
                 # what wierd characters haven't I dealt with?
-                match = re.search(r"[^\da-zA-Z(),.'▼★;* &◊⊕♁½-]", entry['text']) 
+                match = re.search(r"[^\da-zA-Z(),.'▼★;* &◊⊕♁½/-]", entry['text']) 
                 if match:
                     unexpected_chars += match.group(0)
  
