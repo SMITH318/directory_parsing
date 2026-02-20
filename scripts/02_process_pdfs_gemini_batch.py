@@ -27,11 +27,11 @@ logging.basicConfig(
   filename='02_gemini_batch.log', 
   filemode='a', 
   encoding='utf-8', 
-  level=logging.DEBUG) ## <=================== Change logging level here
+  level=logging.WARNING) ## <=================== Change logging level here
 
 # --- Gemini API Configuration --- 
 API_KEY = os.getenv('GEMINI_API_KEY', 'YOUR_API_KEY')
-model_name ='gemini-flash-latest'
+model_name ='gemini-flash-latest' # gemini-3-flash-preview <- is what this has been in 2/2026
 
 if API_KEY == 'YOUR_API_KEY' or not API_KEY:
     print("ERROR: Gemini API key is not set.")
@@ -60,6 +60,68 @@ class OCRLine(BaseModel):
 
 class OCRResult(BaseModel):
     lines: list[OCRLine]
+
+def initiate_batch(requests, batch_file_path, current_batch_job_file, initial_wait_seconds):
+    ## 3.1 Write batch requests to JSONL
+    logger.info(f"Writing batch requests to {batch_file_path}")
+    with open(batch_file_path, 'w') as f:
+        for req in requests:
+            f.write(json.dumps(req) + '\n')
+    
+    ## 3.2 Upload batch file to Gemini
+    logger.debug(f"Uploading file: {batch_file_path}")
+    uploaded_batch_requests = client.files.upload(
+        file=batch_file_path,
+        config=types.UploadFileConfig(mime_type='jsonl', display_name='batch-input-file')
+    )
+    print(f"uploaded file state: {uploaded_batch_requests.state.name}")
+    print(f"uploaded file uri: {uploaded_batch_requests.uri}")
+    print(f"Uploaded request name: {uploaded_batch_requests.name}")
+    logger.debug(f"Uploaded request name: {uploaded_batch_requests.name}")
+    
+    ## 3.3 Create batch processing job
+    batch_job_from_file = client.batches.create(
+        model=model_name,
+        src=uploaded_batch_requests.name,
+        config=types.CreateBatchJobConfig(display_name='Directory OCR Batch Job')
+    )
+    job_name = batch_job_from_file.name
+    print(f"Created batch job at {datetime.datetime.now()} from file: {job_name}")
+    logger.warning(f"Created batch job at {datetime.datetime.now()} from file: {job_name}")
+    with open(current_batch_job_file, 'w') as f:
+        f.write(job_name)
+    if initial_wait_seconds > 0:
+        print(f"Waiting {initial_wait_seconds/60} minutes for batch job to complete...")
+        logger.error(f"Waiting {initial_wait_seconds/60} minutes for batch job to complete at {datetime.datetime.now()}...")
+        time.sleep(initial_wait_seconds)
+        return job_name
+    else:
+        print("No initial wait time specified, leaving job pending.")
+        logger.error("No initial wait time specified, leaving job pending.")
+        exit(0)
+
+def gemini_finish_thinking(key_contents: dict[str:types.Content], batch_file, current_batch_job_file, initial_wait_seconds, followup_wait_seconds):
+    reqs = []
+    print(f"finishing thinking on {len(key_contents)} jobs")
+    logger.info(f"finishing thinking on {len(key_contents)} jobs")
+    with open(batch_file, 'r', encoding='utf-8') as batch_in:
+        for line in batch_in.readlines():
+            prompt = json.loads(line)
+            if prompt["key"] in key_contents:
+                # print(key_contents[prompt["key"]])
+                prompt["request"]["contents"] = [ # contents starts a dictionary, replace it with a list starting with its old contents
+                    prompt["request"]["contents"],
+                    key_contents[prompt["key"]],
+                    types.UserContent(["Finish extracting the text"]).model_dump(exclude_none=True)
+                ]
+                reqs.append(prompt)
+
+    job_name = initiate_batch(reqs, batch_file, current_batch_job_file, initial_wait_seconds)
+    
+    # 4. Wait for completion of batch job - Poll the job status until it's completed.
+    return wait_for_job(job_name, followup_wait_seconds)
+ 
+                
 
 def gemini_prepare_snippet(image_path: Path) -> dict:
     """Upload snippet image and create request to extract text and bounding boxes it using Gemini Vision API."""
@@ -97,6 +159,7 @@ def gemini_prepare_snippet(image_path: Path) -> dict:
                     response_mime_type="application/json", 
                     response_json_schema=OCRResult.model_json_schema(),
                     temperature=0.0,
+                    max_output_tokens=100000 # default is 65,536; expanding because some columns cut off midway
                 ).model_dump(exclude_none=True),
                 "systemInstruction": types.ModelContent(model_prompt).model_dump(exclude_none=True)
             }
@@ -227,7 +290,7 @@ def gemini_extract_snippet(key: str, json_text: str) -> tuple[dict[str, int, int
             logger.warning(f"low confidence ({block.get('confidence', 0)}) produced `{block.get('text', '')}` in {key}")
     return (info, text_blocks)
 
-def process_batch_ocr_output(batch_job: types.BatchJob, offsets_file: Path, result_file_local: Path, output_file: Path) -> bool:
+def process_batch_ocr_output(batch_job: types.BatchJob, offsets_file: Path, result_file_local: Path, output_file: Path) -> tuple[bool, dict]:
     """Process the output of a Gemini Vision batch OCR job. Return True if successful (no errors), False otherwise."""
     if batch_job.state.name != 'JOB_STATE_SUCCEEDED':
         print(f"Job did not succeed, unexpected final state: {batch_job.state.name}")
@@ -249,13 +312,14 @@ def process_batch_ocr_output(batch_job: types.BatchJob, offsets_file: Path, resu
             logger.error(f"Downloaded results file {result_file_local}")
         return process_batch_ocr_output_content(file_content, offsets_file, output_file)
 
-def process_batch_ocr_output_file(content_file: Path, offsets_file: Path, output_file: Path) -> bool:
+def process_batch_ocr_output_file(content_file: Path, offsets_file: Path, output_file: Path) -> tuple[bool, dict]:
     with open(content_file, 'r', encoding='utf-8') as f_in:
         return process_batch_ocr_output_content(f_in.read(), offsets_file, output_file)
 
-def process_batch_ocr_output_content(content: str, offsets_file: Path, output_file: Path) -> bool:
+def process_batch_ocr_output_content(content: str, offsets_file: Path, output_file: Path) -> tuple[bool, dict]:
     successful = True
     offsets_file_df = pd.read_csv(offsets_file)
+    needs_more_thinking = {} #{key: content}
 
     # The result file is also a JSONL file. Parse each line.
     with open(output_file, 'a', encoding='utf-8') as f_out:
@@ -265,15 +329,25 @@ def process_batch_ocr_output_content(content: str, offsets_file: Path, output_fi
                 # Pretty-print the JSON for readability
                 logger.debug(json.dumps(parsed_response, indent=2))
                 logger.debug("-" * 20)
+                content_response = types.GenerateContentResponse.model_validate(parsed_response["response"])
 
-                finish_reason = parsed_response["response"]["candidates"][0]["finishReason"]
+                finish_reason = content_response.candidates[0].finish_reason#parsed_response["response"]["candidates"][0]["finishReason"]
                 if finish_reason != "STOP":
                     print(f"Unexpected finishReason: {finish_reason} in {parsed_response['key']}")
-                    logger.warning(f"Unexpected finishReason: {finish_reason} in {parsed_response['key']}")
+                    logger.warning(f"Unexpected finishReason ({content_response.model_version}): {finish_reason} in {parsed_response['key']}")
+                    logger.info(json.dumps(parsed_response, indent=2))
+                    if finish_reason == "MAX_TOKENS":
+                        logger.warning(f"Total tokens used: {content_response.usage_metadata.total_token_count}")
+                        needs_more_thinking[parsed_response["key"]] = {
+                            "role": "user",
+                            "parts": parsed_response["response"]["candidates"][0]["content"]["parts"]
+                        }
+                        continue
+                        ## rebatch, continue
 
                 info, gemini_output = gemini_extract_snippet(
                     parsed_response["key"], 
-                    parsed_response["response"]["candidates"][0]["content"]["parts"][0]["text"]
+                    content_response.parts[0].text # parts of first content
                 )
 
                 # find offsets for this snippet
@@ -298,7 +372,27 @@ def process_batch_ocr_output_content(content: str, offsets_file: Path, output_fi
                         logger.error(f"Error processing block: {block} in snippet {info} ({parsed_response['key']}), error: {e}")
                         successful = False
                         continue
-    return successful
+    return successful, needs_more_thinking
+
+def wait_for_job(job_name, followup_wait_seconds):
+    while True:
+        batch_job = client.batches.get(name=job_name)
+        if batch_job.state.name in ('JOB_STATE_SUCCEEDED', 'JOB_STATE_FAILED', 'JOB_STATE_CANCELLED'):
+            break
+        if followup_wait_seconds < 0:
+            print(f"Negative followup wait seconds detected: {followup_wait_seconds}. Not waiting, leaving job pending.")
+            logger.error(f"Negative followup wait seconds detected: {followup_wait_seconds}. Not waiting, leaving job pending.")
+            exit(0)
+        print(f"Job not finished at {datetime.datetime.now()}. Current state: {batch_job.state.name}. Waiting {followup_wait_seconds/60} minutes...")
+        time.sleep(followup_wait_seconds)
+
+    print(f"Job finished with state: {batch_job.state.name}")
+    logger.warning(f"Job finished with state: {batch_job.state.name}")
+    if batch_job.state.name == 'JOB_STATE_FAILED':
+        print(f"Batch job error: {batch_job.error}")
+        logger.error(f"Batch job error: {batch_job.error}")
+        exit(1)
+    return batch_job
 
 def main(initial_wait_seconds=-1, followup_wait_seconds=-1, max_to_batch = 4):
       
@@ -350,76 +444,41 @@ def main(initial_wait_seconds=-1, followup_wait_seconds=-1, max_to_batch = 4):
         requests_data = prepare_batch_requests(all_metadata, df_done, offsets_file, max_to_prep = max_to_batch)
 
         # 3. initiate batch ocr processing
-        ## 3.1 Write batch requests to JSONL
-        logger.info(f"Writing batch requests to {batch_file_path}")
-        with open(batch_file_path, 'w') as f:
-            for req in requests_data:
-                f.write(json.dumps(req) + '\n')
-        
-        ## 3.2 Upload batch file to Gemini
-        logger.debug(f"Uploading file: {batch_file_path}")
-        uploaded_batch_requests = client.files.upload(
-            file=batch_file_path,
-            config=types.UploadFileConfig(mime_type='jsonl', display_name='batch-input-file')
-        )
-        print(f"uploaded file state: {uploaded_batch_requests.state.name}")
-        print(f"uploaded file uri: {uploaded_batch_requests.uri}")
-        print(f"Uploaded request name: {uploaded_batch_requests.name}")
-        logger.debug(f"Uploaded request name: {uploaded_batch_requests.name}")
-        
-        ## 3.3 Create batch processing job
-        batch_job_from_file = client.batches.create(
-            model=model_name,
-            src=uploaded_batch_requests.name,
-            config=types.CreateBatchJobConfig(display_name='Directory OCR Batch Job')
-        )
-        job_name = batch_job_from_file.name
-        print(f"Created batch job at {datetime.datetime.now()} from file: {job_name}")
-        logger.warning(f"Created batch job at {datetime.datetime.now()} from file: {job_name}")
-        with open(current_batch_job_file, 'w') as f:
-            f.write(job_name)
-        if initial_wait_seconds > 0:
-            print(f"Waiting {initial_wait_seconds/60} minutes for batch job to complete...")
-            logger.error(f"Waiting {initial_wait_seconds/60} minutes for batch job to complete at {datetime.datetime.now()}...")
-            time.sleep(initial_wait_seconds)
-        else:
-            print("No initial wait time specified, leaving job pending.")
-            logger.error("No initial wait time specified, leaving job pending.")
-            return
+        job_name = initiate_batch(requests_data, batch_file_path, current_batch_job_file, initial_wait_seconds)
     
     # 4. Wait for completion of batch job - Poll the job status until it's completed.
-    while True:
-        batch_job = client.batches.get(name=job_name)
-        if batch_job.state.name in ('JOB_STATE_SUCCEEDED', 'JOB_STATE_FAILED', 'JOB_STATE_CANCELLED'):
-            break
-        if followup_wait_seconds < 0:
-            print(f"Negative followup wait seconds detected: {followup_wait_seconds}. Not waiting, leaving job pending.")
-            logger.error(f"Negative followup wait seconds detected: {followup_wait_seconds}. Not waiting, leaving job pending.")
-            exit(0)
-        print(f"Job not finished at {datetime.datetime.now()}. Current state: {batch_job.state.name}. Waiting {followup_wait_seconds/60} minutes...")
-        time.sleep(followup_wait_seconds)
-
-    print(f"Job finished with state: {batch_job.state.name}")
-    logger.warning(f"Job finished with state: {batch_job.state.name}")
-    if batch_job.state.name == 'JOB_STATE_FAILED':
-        print(f"Batch job error: {batch_job.error}")
-        logger.error(f"Batch job error: {batch_job.error}")
-        exit(1)
+    batch_job = wait_for_job(job_name, followup_wait_seconds)
+ 
 
     # 5. Retrieve, process and save results
-    if process_batch_ocr_output(batch_job, offsets_file, result_file_path, output_file):
+    success, needs_more_thinking = process_batch_ocr_output(batch_job, offsets_file, result_file_path, output_file)
+    if success:
         # delete current batch job file
         current_batch_job_file.unlink(missing_ok=True)
+        if needs_more_thinking:
+            rethinking_batch_job = gemini_finish_thinking(
+                needs_more_thinking, 
+                batch_file_path, 
+                current_batch_job_file, 
+                initial_wait_seconds, 
+                followup_wait_seconds
+            )
+            success, needs_more_thinking = process_batch_ocr_output(rethinking_batch_job, offsets_file, result_file_path, output_file)
+            if not success or needs_more_thinking:
+                print(f"Rethinking didn't help")
+                logger.warning(f"Rethinking didn't help")
+
 
     print(f"\n✓ OCR Process Complete. Data in: {output_file}")
     logger.error(f"\n✓ OCR Process Complete. Data in: {output_file}")
 
 if __name__ == "__main__":
-    INITIAL_WAIT_SECONDS = 60 * 60 * 10 # 10 hours
-    FOLLOWUP_WAIT_SECONDS = 60 * 10    # 10 minutes
-    main(initial_wait_seconds=FOLLOWUP_WAIT_SECONDS, followup_wait_seconds=FOLLOWUP_WAIT_SECONDS)
+    INITIAL_WAIT_SECONDS = 60 * 10 # 10 minutes
+    FOLLOWUP_WAIT_SECONDS = 60 * 5 # 5 minutes
+    for i in range(1000):
+        main(initial_wait_seconds=INITIAL_WAIT_SECONDS, followup_wait_seconds=FOLLOWUP_WAIT_SECONDS)
 
-    # setup for testing handling downloaded responses
+    ##### setup for testing handling downloaded responses ####
     # script_dir = Path(__file__).parent
     # project_root = script_dir if (script_dir / "data").exists() else script_dir.parent
     # output_dir = project_root / "data" / "02_raw_batch"
