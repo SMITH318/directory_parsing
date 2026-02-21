@@ -102,8 +102,8 @@ def initiate_batch(requests, batch_file_path, current_batch_job_file, initial_wa
 
 def gemini_finish_thinking(key_contents: dict[str:types.Content], batch_file, current_batch_job_file, initial_wait_seconds, followup_wait_seconds):
     reqs = []
-    print(f"finishing thinking on {len(key_contents)} jobs")
-    logger.info(f"finishing thinking on {len(key_contents)} jobs")
+    print(f"** Try finishing thinking on {len(key_contents)} jobs")
+    logger.warning(f"Try finishing thinking on {len(key_contents)} jobs")
     with open(batch_file, 'r', encoding='utf-8') as batch_in:
         for line in batch_in.readlines():
             prompt = json.loads(line)
@@ -464,6 +464,7 @@ def main(initial_wait_seconds=-1, followup_wait_seconds=-1, max_to_batch = 4):
                 followup_wait_seconds
             )
             success, needs_more_thinking = process_batch_ocr_output(rethinking_batch_job, offsets_file, result_file_path, output_file)
+            current_batch_job_file.unlink(missing_ok=True)
             if not success or needs_more_thinking:
                 print(f"Rethinking didn't help")
                 logger.warning(f"Rethinking didn't help")
