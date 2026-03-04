@@ -69,7 +69,7 @@ class ClassifiedEntries(BaseModel):
 
 # --- Gemini API Configuration --- 
 API_KEY = os.getenv('GEMINI_API_KEY', 'YOUR_API_KEY')
-model_name ='gemini-flash-latest'
+model_name ='gemini-3.1-flash-lite-preview'#'gemini-2.5-flash'#'gemini-3.1-pro-preview'#'gemini-flash-latest'
 
 if API_KEY == 'YOUR_API_KEY' or not API_KEY:
     print("ERROR: Gemini API key is not set.")
@@ -100,7 +100,8 @@ MODEL_PROMPT = (
     "Return ONLY one JSON object that is made up of two JSON arrays, "
     "one of the doctor entries and one of the city entries. "
     "For every entry, keep existing information (including publication, page number, " 
-    "column number, id, and its bounding box). "
+    "column number, id, and its bounding box) and leave it unchanged. "
+    "These values have no impact on the other, following fields. "
     "City entries consist of the name of the city, sometimes followed by postal information "
     "in parentheses consiting of the type of postal reference (R.D., P.O., etc.) and its name. "
     "Most cities then are followed by a population number, and all end with the name of the county."
@@ -110,32 +111,38 @@ MODEL_PROMPT = (
     "an ID number, and a 2-digit graduation year or as ◊ if the information is missing), "
     "and a 2-digit license year in parentheses after an l or I. "
     "If the license year is unknown, a t appears in place of a year; "
-    "encode it as None. A ♁ can appear in parentheses, instead of licensing "
+    "encode it as -2. A ♁ can appear in parentheses, instead of licensing "
     "information; encode it as -1 for the license year. "
     "For most doctors, a 2-digit birth year in the format (b'YY) appears. "
+    "Leave all years as 2 digits. "
     "Provide the city ID for each doctor based on the last city entry encountered. "
     "⊕ indicates the doctor is an AMA fellow, and their name in capitals indicates AMA membership. "
+    "Doctors' entries that include (col), (col.), or near variations - and only those entries - "
+    "should have their col value set as True. All others should be false. "
     "Addresses can be street adresses, building names, P.O. boxes, or R.D. routes. "
     "Some doctors are members of societies, which are listed in parentheses and "
     "encoded as capital letters A-G followed by one- and two-digit numbers. "
     "Specialties are short abbreviations that can be follow by either * or ★. "
     "Specialty abbreviations are S, Ob, G, ObG, Or, Pr, Op, A, LR, ALR, OALR, U, D, Pd, N, "
     "P, NP, I (sometimes appears as l), T, Anes, CP, R, Path, Bact, and PH. "
-    "▼ and any following N or G indicates a military commission. "
+    "▼ and any following N or G indicates a military commission. Membership in federal"
+    "organizations like the U.S.P.H.S. should also be recorded in the military field. "
     "Put any extra information that does not fit in another field into the other_info field. "
     "For string/text fields, maintain the UTF-8 character encoding, "
-    "retaining all text characters as they are."
+    "retaining all text characters as they are. "
 )
 
 script_dir = Path(__file__).resolve().parent
 project_root = script_dir.parent
 
 # Set up file paths
-input_file = project_root / "data" / "03_processed_batch" / "entries_segmented_gemini.csv"
-output_dir = project_root / "data" / "04_extracted_entries_gemini"
+input_file = project_root / "data" / "03_processed_batch" / "entries_segmented_gemini_2pgs.csv"
+output_dir = project_root / "data" / f"04_extracted_entries_gemini_2pgs_{model_name}"
 temp_file = output_dir / "temp.csv"
 output_file = output_dir / "amd_1918_doc_entries.csv" 
 cities_file = output_dir / "amd_1918_city_entries.csv"
+prompts_file = output_dir / "extracted_entries_prompts.jsonl"
+responses_file = output_dir / "extracted_entries_responses.jsonl"
 output_dir.mkdir(parents=True, exist_ok=True)
 
 # 1. Load the data, group by column
@@ -172,22 +179,34 @@ for group_name, group_df in grouped_inputs:
         # 2. Save df and upload it
         last_entry = min(next_entry + MAX_ENTRIES_SENT, len(group_df))
         current_df = group_df.iloc[next_entry:last_entry]
-        current_df.to_csv(temp_file, encoding="utf-8")
-        time.sleep(1) # make sure file has time to be written
+        current_df.to_csv(temp_file, index=False, encoding="utf-8")# trying index=False 3/3
+        # time.sleep(1) # make sure file has time to be written
         
         # upload blocks file
         file = client.files.upload(
             file=temp_file,
             config=types.UploadFileConfig(mime_type='text/csv')#(mime_type='text/csv; charset=UTF-8')
         )
-        time.sleep(1) # make sure file has time to be uploaded
-        temp_file.unlink(missing_ok=True) # delete local file
 
         # 3. Send parsing prompt
         logger.info(f"prompting for {group_name} ({next_entry}:{last_entry}) at {datetime.datetime.now()}")
         print(f"prompting for {group_name} ({next_entry}:{last_entry}) at {datetime.datetime.now()}")
 
         try:
+            # save prompt for tuning
+            with open(temp_file, 'r', encoding='utf-8') as f:
+                file_text = f.read()
+            with open(prompts_file, 'a') as f:
+                f.write(json.dumps(
+                    {
+                        "systemInstruction" : types.Content(role="system", parts = [types.Part(text=MODEL_PROMPT)]).model_dump(exclude_none=True),
+                        "contents": types.UserContent([
+                            types.Part(text=f'id of last city encountered was {prev_city["entry_id"]}'), 
+                            types.Part(text=f'name of last state encountered was {prev_city["state_name"]}'), 
+                            types.Part(text=file_text)
+                        ] if prev_city else [file_text]).model_dump(exclude_none=True)
+                    }
+                )+ '\n')
             #response_stream = client.models.generate_content_stream(
             response = client.models.generate_content(
                 model=model_name,
@@ -199,11 +218,11 @@ for group_name, group_df in grouped_inputs:
                 config=types.GenerateContentConfig(
                     system_instruction=MODEL_PROMPT,
                     temperature=0.0,
+                    #thinking_config=types.ThinkingConfig(thinking_level="MINIMAL"), # minimal thinking hurt results 3/3
                     response_mime_type="application/json", 
                     response_json_schema=ClassifiedEntries.model_json_schema(),
                 )
             )
-            
             # 3. collect streaming responses
             # response = ""
             # logger.debug("="*20)
@@ -223,7 +242,9 @@ for group_name, group_df in grouped_inputs:
                 response_text = '\n'.join(lines[1:-1]) if len(lines) > 2 else response_text
                 response_text = response_text.replace('```json', '').replace('```', '').strip()
 
-            json_entries = entry = json.loads(response_text)
+            json_entries = json.loads(response_text)
+            with open(responses_file, 'a') as f:
+                f.write(json.dumps(json_entries) + '\n')
             doc_entries = json_entries["doc_entries"]
             city_entries = json_entries["city_entries"]
 
@@ -266,6 +287,7 @@ for group_name, group_df in grouped_inputs:
 
         # 5. Clean up, prepare for next iteration
         client.files.delete(name=file.name) # Delete remote file
+        temp_file.unlink(missing_ok=True) # delete local file
         next_entry += MAX_ENTRIES_SENT
     # end grouping while
 # end for column loop
