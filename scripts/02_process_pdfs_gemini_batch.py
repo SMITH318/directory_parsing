@@ -200,18 +200,13 @@ def prepare_batch_requests(all_metadata: dict, df_done: pd.DataFrame, offsets_fi
     try:
         for pdf_meta in all_metadata:
             pdf_name = pdf_meta['source_pdf']
-            print(f"\nPackaging Snippets for: {pdf_name}")
-            logger.info(f"\nPackaging Snippets for: {pdf_name}")
 
             for page_meta in pdf_meta['pages']:
                 page_num = page_meta['page_num']
-                print(f"  Page {page_num}...", end="", flush=True)
-                logger.info(f"  Page {page_num}...")
 
                 # Prepare each snippet (article)
                 for snip in page_meta['snippets']:
                     col_idx = snip.get('col_idx', snip.get('column', 0))
-                    print(f"{col_idx}.", end="", flush=True)
 
                     # Skip already processed snippets
                     if ((df_done['pub'] == pdf_name) & 
@@ -220,6 +215,9 @@ def prepare_batch_requests(all_metadata: dict, df_done: pd.DataFrame, offsets_fi
                         logger.info(f"Previously processed column {col_idx}")
                         print(f"Previously processed", end=" ", flush=True)
                         continue
+
+                    print(f"Packaging Snippet for: {pdf_name}, Page {page_num}, {col_idx}")
+                    logger.info(f"Packaging Snippet for: {pdf_name}, Page {page_num}, {col_idx}")
                     
                     snippet_image_path = snip['path']
                     if not Path(snippet_image_path).exists():
@@ -242,21 +240,22 @@ def prepare_batch_requests(all_metadata: dict, df_done: pd.DataFrame, offsets_fi
                             print(f"\nReached max to prepare limit of {max_to_prep}. Stopping preparation.")
                             logger.info(f"Reached max to prepare limit of {max_to_prep}. Stopping preparation.")
                             raise StopIteration
-    
-
-                print(" Prepared.")
+                    print(" Prepared.")
     except StopIteration:
         pass
     offsets_df = pd.DataFrame(offsets)
     offsets_df.to_csv(offsets_file, index=False)
     gc.collect()
+    if len(requests_data) == 0:
+        print(f"No snippets prepared, all finished(?). Exiting.")
+        logger.error(f"No snippets prepared, all finished(?). Exiting.")
+        exit(0)
     print(f"Total snippets prepared for OCR: {len(requests_data)}")
     logger.info(f"Total snippets prepared for OCR: {len(requests_data)}")
+    
     return requests_data
 
-def gemini_extract_snippet(key: str, json_text: str) -> tuple[dict[str, int, int, int], list[OCRLine]]:
-    """Extract text blocks from Gemini Vision API response."""
-
+def split_key(key:str) -> dict:
     # parse example key: gemini_ocr_Alabama_p01_r00_c000.jpg
     key_parts = key.split('.')[0].split('_')
     if len(key_parts) < 6:
@@ -266,12 +265,17 @@ def gemini_extract_snippet(key: str, json_text: str) -> tuple[dict[str, int, int
     page_str = key_parts[3][1:]  # remove 'p' prefix
     row_str = key_parts[4][1:]  # remove 'r' prefix
     col_str = key_parts[5][1:]  # remove 'c' prefix 
-    info = {
+    return {
         "state": state,
         "page": int(page_str),
         "row": int(row_str),
         "column": int(col_str)
     }
+
+def gemini_extract_snippet(key: str, json_text: str) -> tuple[dict[str, int, int, int], list[OCRLine]]:
+    """Extract text blocks from Gemini Vision API response."""
+
+    info = split_key(key)
 
     try:
         json_response = json.loads(json_text)
@@ -290,7 +294,7 @@ def gemini_extract_snippet(key: str, json_text: str) -> tuple[dict[str, int, int
             logger.warning(f"low confidence ({block.get('confidence', 0)}) produced `{block.get('text', '')}` in {key}")
     return (info, text_blocks)
 
-def process_batch_ocr_output(batch_job: types.BatchJob, offsets_file: Path, result_file_local: Path, output_file: Path) -> tuple[bool, dict]:
+def process_batch_ocr_output(batch_job: types.BatchJob, offsets_file: Path, result_file_local: Path, output_file: Path, save_max_token_responses: bool = False) -> tuple[bool, dict]:
     """Process the output of a Gemini Vision batch OCR job. Return True if successful (no errors), False otherwise."""
     if batch_job.state.name != 'JOB_STATE_SUCCEEDED':
         print(f"Job did not succeed, unexpected final state: {batch_job.state.name}")
@@ -310,13 +314,13 @@ def process_batch_ocr_output(batch_job: types.BatchJob, offsets_file: Path, resu
         with open(result_file_local, 'w', encoding = 'utf-8') as f:
             f.write(file_content)
             logger.error(f"Downloaded results file {result_file_local}")
-        return process_batch_ocr_output_content(file_content, offsets_file, output_file)
+        return process_batch_ocr_output_content(file_content, offsets_file, output_file, save_max_token_responses)
 
-def process_batch_ocr_output_file(content_file: Path, offsets_file: Path, output_file: Path) -> tuple[bool, dict]:
+def process_batch_ocr_output_file(content_file: Path, offsets_file: Path, output_file: Path, save_max_token_responses: bool = False) -> tuple[bool, dict]:
     with open(content_file, 'r', encoding='utf-8') as f_in:
-        return process_batch_ocr_output_content(f_in.read(), offsets_file, output_file)
+        return process_batch_ocr_output_content(f_in.read(), offsets_file, output_file, save_max_token_responses)
 
-def process_batch_ocr_output_content(content: str, offsets_file: Path, output_file: Path) -> tuple[bool, dict]:
+def process_batch_ocr_output_content(content: str, offsets_file: Path, output_file: Path, save_max_token_responses: bool) -> tuple[bool, dict]:
     successful = True
     offsets_file_df = pd.read_csv(offsets_file)
     needs_more_thinking = {} #{key: content}
@@ -338,6 +342,20 @@ def process_batch_ocr_output_content(content: str, offsets_file: Path, output_fi
                     logger.info(json.dumps(parsed_response, indent=2))
                     if finish_reason == "MAX_TOKENS":
                         logger.warning(f"Total tokens used: {content_response.usage_metadata.total_token_count}")
+                        info = split_key(parsed_response['key'])
+                        if save_max_token_responses:
+                            entry = {
+                                "pub": info["state"],
+                                "page": info["page"],
+                                "col": info["column"],
+                                "text": "******* KEEPS FAILING! SKIPPING FOR NOW *******",
+                                "conf": 0.0,
+                                "x": 0.0,
+                                "y": 0.0,
+                                "width": 0,
+                                "height": 0
+                            }
+                            f_out.write(json.dumps(entry, cls=NumpyEncoder, ensure_ascii=False) + "\n")
                         needs_more_thinking[parsed_response["key"]] = {
                             "role": "user",
                             "parts": parsed_response["response"]["candidates"][0]["content"]["parts"]
@@ -463,7 +481,13 @@ def main(initial_wait_seconds=-1, followup_wait_seconds=-1, max_to_batch = 4):
                 initial_wait_seconds, 
                 followup_wait_seconds
             )
-            success, needs_more_thinking = process_batch_ocr_output(rethinking_batch_job, offsets_file, result_file_path, output_file)
+            success, needs_more_thinking = process_batch_ocr_output(
+                rethinking_batch_job, 
+                offsets_file, 
+                result_file_path, 
+                output_file, 
+                save_max_token_responses=True
+            )
             current_batch_job_file.unlink(missing_ok=True)
             if not success or needs_more_thinking:
                 print(f"Rethinking didn't help")
@@ -477,7 +501,18 @@ if __name__ == "__main__":
     INITIAL_WAIT_SECONDS = 60 * 10 # 10 minutes
     FOLLOWUP_WAIT_SECONDS = 60 * 5 # 5 minutes
     for i in range(1000):
-        main(initial_wait_seconds=INITIAL_WAIT_SECONDS, followup_wait_seconds=FOLLOWUP_WAIT_SECONDS)
+        try:
+            print("*** Iteration", i, "***")
+            main(initial_wait_seconds=INITIAL_WAIT_SECONDS, followup_wait_seconds=FOLLOWUP_WAIT_SECONDS)
+        except Exception as e:
+            print("*** main loop exception, pressing on ***")
+            print(e)
+            script_dir = Path(__file__).parent
+            project_root = script_dir if (script_dir / "data").exists() else script_dir.parent
+            output_dir = project_root / "data" / "02_raw_batch"
+            current_batch_job_file = output_dir / "current_batch_job.txt"
+            current_batch_job_file.unlink(missing_ok=True) # something went very wrong so scrub any pending attempt
+            pass
 
     ##### setup for testing handling downloaded responses ####
     # script_dir = Path(__file__).parent
