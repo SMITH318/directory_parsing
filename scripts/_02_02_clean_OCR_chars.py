@@ -33,9 +33,9 @@ RE_MAP = {
     #replace commas and underscores with periods
     #text=re.sub('[,_]', '.', text)
     #cleanup '(l'89)' format - often 'l' appears as 'I' or '1', space not always there
-    re.compile(r"\([lI1]?[ ']?(?P<year>[0-9]{2})\)"): r'(l \g<year>)',
+    re.compile(r"\([lI1][ ']?(?P<year>[0-9]{2})\)"): r'(l \g<year>)',
     #cleanup '(l †)' to '(l t)' format - often 'l' appears as 'I' or '1', space not always there, 't' sometimes f
-    re.compile(r'\([lI1] ?[tf†]\)'): r'(l t)',
+    re.compile(r"\([lI1][ ']?[tf†]\)"): r'(l t)',
     #replace unbundled 1/2 with single character
     #re.compile(r' ?1/2'): r"½", # ½ causes problems when sent back to Gemini
     #reduce multiples of any non-word character (space, punctuation) to single
@@ -59,6 +59,13 @@ def clean_text(s: str) -> str:
     s = s.strip()
     return s
 
+def get_unexpected_chars(s: str) -> str:
+    match = re.search(r"[^\da-zA-Z(),.'▼★;‡* &◊⊕♁½/-]", s)
+    return match.group(0) if match else ""
+
+def has_unexpected_chars(s: str) -> bool:
+    return get_unexpected_chars(s) != ""
+
 def clean_lines(filename_in, filename_out):
     # def strip_str(string):
     #     return string.strip(' \n\t')# trim start/end whitespace as well as common OCR blips
@@ -73,9 +80,7 @@ def clean_lines(filename_in, filename_out):
                 out_file.write(json.dumps(entry, ensure_ascii=False) + '\n')
                 
                 # what wierd characters haven't I dealt with?
-                match = re.search(r"[^\da-zA-Z(),.'▼★;* &◊⊕♁½/-]", entry['text']) 
-                if match:
-                    unexpected_chars += match.group(0)
+                unexpected_chars += get_unexpected_chars(entry['text'])
  
                 #consider aggregating lines ending in '-' with next line (by not adding \n)
                 #aggregate if character before '-' is lowercase letter and first character of next line is lowercase letter
@@ -91,18 +96,19 @@ def clean_lines(filename_in, filename_out):
         print("No expected characters!!")
 
 # __main__
-if True:
-    # Setup project paths
-    script_dir = Path(__file__).parent if '__file__' in dir() else Path.cwd()
-    project_root = script_dir if (script_dir / "data").exists() else script_dir.parent
+if __name__ == "__main__":
+    if True:
+        # Setup project paths
+        script_dir = Path(__file__).parent if '__file__' in dir() else Path.cwd()
+        project_root = script_dir if (script_dir / "data").exists() else script_dir.parent
 
-    raw_folder = project_root / "data" / "02_raw_batch"
+        raw_folder = project_root / "data" / "02_raw_batch"
 
-    input_file = raw_folder / "ocr_output_reviewed.jsonl"
-    output_file = raw_folder / "ocr_output_auto_cleaned.jsonl"
+        input_file = raw_folder / "ocr_output_reviewed.jsonl"
+        output_file = raw_folder / "ocr_output_auto_cleaned.jsonl"
 
-    clean_lines(input_file, output_file)
-else: #tests
-    # print("'"+re.compile(r'(?P<char>\W)\1+').sub(r'\g<char>', ".;;... ''.")+"'")
-    clean_lines('clean_tests.txt', 'clean_tests_out.txt')
+        clean_lines(input_file, output_file)
+    else: #tests
+        # print("'"+re.compile(r'(?P<char>\W)\1+').sub(r'\g<char>', ".;;... ''.")+"'")
+        clean_lines('clean_tests.txt', 'clean_tests_out.txt')
     
