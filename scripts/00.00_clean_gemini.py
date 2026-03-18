@@ -23,7 +23,7 @@ def remove_all_caches(client):
     for i, cache in enumerate(client.caches.list()):
         # delete each cache
         client.caches.delete(name=cache.name)
-    print(f"deleted {i} batches")
+    print(f"deleted {i} caches")
 
 
 if __name__ == "__main__":
