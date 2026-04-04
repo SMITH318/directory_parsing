@@ -1,8 +1,6 @@
-from google import genai
 from pydantic import BaseModel
-import os
 from typing import Literal
-from _batch_utilities import *
+from _ExtractEntriesBatchProcessor import *
 
 import logging
 logger = logging.getLogger(__name__)
@@ -12,13 +10,6 @@ logging.basicConfig(
   encoding='utf-8', 
   level=logging.INFO) ## <=================== Change logging level here
 
-
-# type definitions for JSON schemas
-# class NumpyEncoder(json.JSONEncoder):
-#     def default(self, obj):
-#         if isinstance(obj, (np.int64, np.int32, np.float32, np.float64)):
-#             return float(obj)
-#         return json.JSONEncoder.default(self, obj)
 
 class DocEntry(BaseModel):
     publication: str
@@ -49,26 +40,7 @@ class DocEntry(BaseModel):
 class DocEntries(BaseModel):
     doc_entries: list[DocEntry]
 
-# --- Gemini API Configuration --- 
-API_KEY = os.getenv('GEMINI_API_KEY', 'YOUR_API_KEY')
-MODEL_NAME ='gemini-3-flash-preview'#'gemini-3.1-flash-lite-preview'#'gemini-2.5-flash'#'gemini-3.1-pro-preview'#'gemini-flash-latest'
-# model_name = 'projects/670765358210/locations/us-central1/endpoints/2458473365090861056' # my tuned model - may have to run in Vertex
-# model_name = 'tunedModels/2458473365090861056'
-
-if API_KEY == 'YOUR_API_KEY' or not API_KEY:
-    print("ERROR: Gemini API key is not set.")
-    logger.error("ERROR: Gemini API key is not set.")
-    exit(1)
-
-# Initialize Gemini
-print("Initializing Gemini for OCR...")
-#print(f"Key: {API_KEY}")
-logger.info(f"Initializing Gemini for OCR... with {MODEL_NAME}")
-client = genai.Client(api_key=API_KEY)
-# PROJECT_ID = 'digitizing-directories-mrsmith'
-# REGION = 'us-central1'
-# client = genai.Client(vertexai=True, project=PROJECT_ID, location=REGION)
-
+MODEL_NAME ='gemini-3-flash-preview'
 MODEL_PROMPT = (
     "Parse these ordered entries from a medical directory, each line is a complete entry. "
     "Entries are contained within a single column of a page and publication. "
@@ -154,24 +126,21 @@ MODEL_PROMPT = (
     "schools is N.C.3, '09; license_year is 10; and address is 1701 Mulberry St. "
 )
 
-if True:
-    batch_prompt_dataframe(
-        client,
-        logger, 
-        MODEL_NAME, 
-        MODEL_PROMPT, 
-        "doc", 
-        DocEntry, 
-        DocEntries, 
-        data_set = "2026.03.18",
-        only_count_tokens=False,#True,
-        max_batches_at_once=1,#80,
-        max_entries_per_batch=20, #50, prompts sized <=5400, but never left pending; 20 had prompts sized <= 2200
-        initial_wait_seconds=60 * 8, # 8 minutes
-        followup_wait_seconds= 60 * 1, # 1 minute
-        record_prompts_responses=True
-    )
-else:
-    output_file = Path(__file__).resolve().parent.parent / f"04_extracted_entries_gemini_2026.03.18" / f"amd_1918_doc_entries.csv" 
-    wait_and_process_jobs(client, logger, 60 * 1, lambda job : process_job_output(client, logger, job, "doc", DocEntry, output_file))
-client.close()
+batch_processor = ExtractEntriesBatchProcessor(
+    logger, 
+    MODEL_NAME, 
+    MODEL_PROMPT, 
+    "doc", 
+    DocEntry, 
+    DocEntries, 
+    only_count_tokens=False,#True,
+    max_batches_at_once=1,#80,
+    max_entries_per_batch=20, #50, prompts sized <=5400, but never left pending (same with 40); 20 had prompts sized <= 2200
+    initial_wait_seconds=60 * 8, # 8 minutes
+    followup_wait_seconds= 60 * 1, # 1 minute
+)
+
+batch_processor.batch_prompt(
+    *gen_extract_entries_paths("doc", "2026.03.18"),
+    # record_prompts_responses=True
+)
