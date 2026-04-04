@@ -11,6 +11,9 @@ import csv
 from collections import defaultdict
 import datetime
 from typing import Literal
+import re
+
+## TODO: turn into (cheaper) batch process that can stop and restart
 
 import logging
 logger = logging.getLogger(__name__)
@@ -18,7 +21,7 @@ logging.basicConfig(
   filename='03_classify_lines_gemini.log', 
   filemode='a', 
   encoding='utf-8', 
-  level=logging.INFO) ## <=================== Change logging level here
+  level=logging.WARNING) ## <=================== Change logging level here
 
 # --- Gemini API Configuration --- 
 API_KEY = os.getenv('GEMINI_API_KEY', 'YOUR_API_KEY')
@@ -56,7 +59,9 @@ class ClassifiedEntries(BaseModel):
     entries: list[ClassifiedLine]
 
 MODEL_PROMPT = (
-    "Combine these ordered lines of text from a directory into entries. "
+    "Combine these ordered lines of text from a directory into entries, "
+    "leaving ALL of the characters in their UTF-8 format. "
+    "PRESERVE ALL of these characters: ▼, ⊕, ◊, ★, †, ♁, and ‡. "
     "Each line may be a complete entry or part of a multi-line entry. " 
     "Entries are contained within a single column of a page and publication. "
     "Entries can be: (1) names of states or provinces; " 
@@ -75,11 +80,10 @@ MODEL_PROMPT = (
     "specified by an x and y coordinate, a height, and a width. " 
     "When combining lines, remove hyphens or dashes at end of lines for words broken "
     "across lines, and combine the full word."
-    "Maintain the UTF-8 character encoding, retaining all characters as they are, "
-    "with the exception of hyphens or dashes for words broken across lines. "
+    "Maintain the UTF-8 character encoding, retaining ALL characters as they are. "
 )
 
-def group_into_entries(temp_file, col_blocks, max_retries=1) -> list[dict]: # [{"linetype": LineType, "blocks": [block, ...]}, ...]
+def group_into_entries(id_str, temp_file, col_blocks, max_retries=1) -> list[dict]: # [{"linetype": LineType, "blocks": [block, ...]}, ...]
     # if not blocks:
     #     return []
 
@@ -111,13 +115,17 @@ def group_into_entries(temp_file, col_blocks, max_retries=1) -> list[dict]: # [{
                     temperature=0.0,
                     response_mime_type="application/json", 
                     response_json_schema=ClassifiedEntries.model_json_schema(),
+                    thinking_config=types.ThinkingConfig(thinking_level="LOW"), # MINIMAL dropped and added random characters, rarely returned nothing
                 )
             )
+            finish_reason = response.candidates[0].finish_reason
+            if finish_reason != "STOP":
+                print(f"\t**** unexpected finish reason: {finish_reason} ****")
+                logging.warning(f"unexpected finish reason: {finish_reason} for {id_str}")
             response_text = response.text.strip()
             logging.info("="*20)
             logging.info(response_text)
             logging.info("="*20)
-
             # Clean markdown formatting if present
             if response_text.startswith('```'):
                 lines = response_text.split('\n')
@@ -131,11 +139,11 @@ def group_into_entries(temp_file, col_blocks, max_retries=1) -> list[dict]: # [{
 
         except json.JSONDecodeError as e:
             print(f"\n    Warning: JSON parse error (attempt {attempt + 1}/{max_retries})")
-            logger.warning(f"JSON parse error (attempt {attempt + 1}/{max_retries})")
+            logger.warning(f"JSON parse error (attempt {attempt + 1}/{max_retries}) for {id_str}")
             time.sleep(1)
         except Exception as e:
             print(f"\n    Warning: Gemini API error (attempt {attempt + 1}/{max_retries}): {e}")
-            logger.warning(f"Gemini API error (attempt {attempt + 1}/{max_retries}): {e}")
+            logger.warning(f"Gemini API error (attempt {attempt + 1}/{max_retries}) for {id_str}: {e}")
             time.sleep(2 ** attempt)
     
 
@@ -144,14 +152,17 @@ def group_into_entries(temp_file, col_blocks, max_retries=1) -> list[dict]: # [{
     client.files.delete(name=file.name)
 
     logger.info(f"received {len(entries)} entries at {datetime.datetime.now()}")
-    print(f"\treceived {len(entries)}")
+    print(f"\treceived {len(entries)} entries")
 
     # verify all text is present, in the right order
-    text_in = " ".join([block["text"] for block in col_blocks])
-    text_out = " ".join([entry["full_text"] for entry in entries])
+    text_in = re.sub(r"[\s-]","","".join([block["text"] for block in col_blocks]))
+    text_out = re.sub(r"[\s-]","","".join([entry["full_text"] for entry in entries]))
     if text_in != text_out:
-        print(f"warning: entry text dropped!")
-        logger.error(f"entry text dropped:\ntext_in:  {text_in}\ntext_out: {text_out}")
+        print(f"warning: entry text changed! (length in {len(text_in)} vs. out {len(text_out)})")
+        logger.error(
+            f"entry text changed in {id_str} (length in {len(text_in)} vs. out {len(text_out)}):"
+            f"\ntext_in:  {text_in}\ntext_out: {text_out}" # extra space after text_in to make it same length as text_out
+        )
 
     return entries
 
@@ -161,9 +172,9 @@ def main():
     project_root = script_dir.parent
 
     # Use command line argument or default
-    input_filename = "ocr_output_auto_cleaned.jsonl"
+    input_filename = "ocr_output_reviewed_2026.03.18.jsonl"
     input_file = project_root / "data" / "02_raw_batch" / input_filename
-    output_file = project_root / "data" / "03_processed_batch" / "entries_segmented_gemini.csv"
+    output_file = project_root / "data" / "03_processed_batch" / "entries_segmented_2026.03.18.csv"
     output_file.parent.mkdir(parents=True, exist_ok=True)
     temp_file = output_file.parent / "temp_col.json"
 
@@ -201,9 +212,10 @@ def main():
     num_unknown = 0
     all_entries = []
     for (pub_name, page_num, col_num), blocks in data_by_col.items():
-        print(f"Clumping: {pub_name} - Page {page_num} Column {col_num}")
+        id_str = f"{pub_name} - {page_num}.{col_num}"
+        print(f"Clumping: {id_str}...")
 
-        entries = group_into_entries(temp_file, blocks)
+        entries = group_into_entries(id_str, temp_file, blocks)
 
         for idx, entry in enumerate(entries):
             if entry["entryType"] == "UNKNOWN":
