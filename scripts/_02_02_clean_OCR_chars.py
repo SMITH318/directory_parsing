@@ -17,7 +17,7 @@ REPL = {
     # "©": "@", "⋄": "*",
     # "◆": "◊",
     # "▼": "V", "▽": "V", "ṽ": "V", "Ṿ": "V", "Ṿ":"V", "Ý":"V", '¥':"V", "Ÿ":"V"
-    'δ': '♁'
+    # 'δ': '♁'
 }
 
 # compile regexes
@@ -36,10 +36,14 @@ RE_MAP = {
     re.compile(r"\([lI1][ ']?(?P<year>[0-9]{2})\)"): r'(l \g<year>)',
     #cleanup '(l †)' to '(l t)' format - often 'l' appears as 'I' or '1', space not always there, 't' sometimes f
     re.compile(r"\([lI1][ ']?[tf†]\)"): r'(l t)',
-    #replace unbundled 1/2 with single character
-    #re.compile(r' ?1/2'): r"½", # ½ causes problems when sent back to Gemini
+    #replace single character 1/2 with unbundled
+    re.compile(r' ?½|(1⁄2)'): r" 1/2", # ½ causes problems when sent back to Gemini
     #reduce multiples of any non-word character (space, punctuation) to single
-    re.compile(r'(?P<char>\W)\1+'): r'\g<char>'
+    re.compile(r'(?P<char>\W)\1+'): r'\g<char>',
+    #replace (δ) or (♂) with (♁)
+    re.compile(r'\([δ♂]\)'): r'(♁)',
+    #replace(#) with (‡)
+    re.compile(r'\(#\)'): r'(‡)',
 }
 
 def clean_text(s: str) -> str:
@@ -48,9 +52,9 @@ def clean_text(s: str) -> str:
     # trim start/end whitespace
     s = s.strip()
     # direct replacements
-    for a, b in REPL.items():
-        if a in s:
-            s = s.replace(a, b)
+    # for a, b in REPL.items():
+    #     if a in s:
+    #         s = s.replace(a, b)
     # regex replacements
     for a, b in RE_MAP.items():
         s = a.sub(b, s)
@@ -60,7 +64,7 @@ def clean_text(s: str) -> str:
     return s
 
 def get_unexpected_chars(s: str) -> str:
-    match = re.search(r"[^\da-zA-Z(),.'▼★;‡* &◊⊕♁½/-]", s)
+    match = re.search(r"[^\da-zA-Z(),.'▼★;‡* &◊⊕♁△/-]", s)
     return match.group(0) if match else ""
 
 def has_unexpected_chars(s: str) -> bool:
