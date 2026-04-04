@@ -1,15 +1,8 @@
-import json
-import numpy as np
-from pathlib import Path
 from google import genai
-from google.genai import types
-import pandas as pd
-from  pydantic import BaseModel
+from pydantic import BaseModel
 import os
-import time
-import csv
-import datetime
 from typing import Literal
+from _batch_utilities import *
 
 import logging
 logger = logging.getLogger(__name__)
@@ -21,11 +14,11 @@ logging.basicConfig(
 
 
 # type definitions for JSON schemas
-class NumpyEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, (np.int64, np.int32, np.float32, np.float64)):
-            return float(obj)
-        return json.JSONEncoder.default(self, obj)
+# class NumpyEncoder(json.JSONEncoder):
+#     def default(self, obj):
+#         if isinstance(obj, (np.int64, np.int32, np.float32, np.float64)):
+#             return float(obj)
+#         return json.JSONEncoder.default(self, obj)
 
 class DocEntry(BaseModel):
     publication: str
@@ -58,7 +51,7 @@ class DocEntries(BaseModel):
 
 # --- Gemini API Configuration --- 
 API_KEY = os.getenv('GEMINI_API_KEY', 'YOUR_API_KEY')
-model_name ='gemini-3-flash-preview'#'gemini-3.1-flash-lite-preview'#'gemini-2.5-flash'#'gemini-3.1-pro-preview'#'gemini-flash-latest'
+MODEL_NAME ='gemini-3-flash-preview'#'gemini-3.1-flash-lite-preview'#'gemini-2.5-flash'#'gemini-3.1-pro-preview'#'gemini-flash-latest'
 # model_name = 'projects/670765358210/locations/us-central1/endpoints/2458473365090861056' # my tuned model - may have to run in Vertex
 # model_name = 'tunedModels/2458473365090861056'
 
@@ -70,14 +63,12 @@ if API_KEY == 'YOUR_API_KEY' or not API_KEY:
 # Initialize Gemini
 print("Initializing Gemini for OCR...")
 #print(f"Key: {API_KEY}")
-logger.info(f"Initializing Gemini for OCR... with {model_name}")
+logger.info(f"Initializing Gemini for OCR... with {MODEL_NAME}")
 client = genai.Client(api_key=API_KEY)
 # PROJECT_ID = 'digitizing-directories-mrsmith'
 # REGION = 'us-central1'
 # client = genai.Client(vertexai=True, project=PROJECT_ID, location=REGION)
 
-MAX_ATTEMPTS = 3
-MAX_ENTRIES_SENT = 20
 MODEL_PROMPT = (
     "Parse these ordered entries from a medical directory, each line is a complete entry. "
     "Entries are contained within a single column of a page and publication. "
@@ -85,17 +76,40 @@ MODEL_PROMPT = (
     "and their careers, including their birth year, education, address, " 
     "office address, any specialty, among others. "
     "For each entry, I'm providing the name of the publication, "
-    "the page number, the column number, the entry type, its text, an id for the doctor, "
+    "the page number, the column number, the entry type, its text, an entry id for the doctor, "
     "an id for the city where they live, and "
     "a bounding box represented by an x and y coordinate, a height, and a width. "
-    "Return ONLY one JSON array of the doctor entries. "
+    "Return ONLY one JSON array of the doctor entries with this exact format:\n"
+    '[\n'
+    '  {"publication": "Alabama", "page_number": 1, "column": 0, "x": 297, "y": 1622, "width": 686, "height": 41, '
+    '"entry_id": "Alab_001_00_00002", "city_id": "Alab_001_00_00001", "name": "CLARK, JAMES THOMAS", '
+    '"AMA_member": True, "col": False, "birth_year": "76", "AMA_fellow": False, "schools": "Ala.4,\'11", '
+    '"license_year": "11", "not_in_practice": False, "address": "", "office": "", "hours": "", '
+    '"societies": "", "specialty": "", "military": "", "other_info": ""},\n'
+    '  {"publication": "Alabama", "page_number": 4, "column": 0, "x": 215, "y": 1263, "width": 760, "height": 63, '
+    '"entry_id": "Alab_004_00_00268", "city_id": "Alab_003_00_00190", "name": "DAVIS, JOHN DANL. SINKLER", '
+    '"AMA_member": True, "col": False, "birth_year": "59", "AMA_fellow": True, "schools": "Ga.1,\'79", '
+    '"license_year": "11", "not_in_practice": False, "address": "2031 Ave. G", "office": "", "hours": "1-3", '
+    '"societies": "(A1,28)", "specialty": "S★", "military": "", '
+    '"other_info": "Prof. Prin. and Prac. of Surg. and Clin. Surg., Ala. G1"},\n'
+    '  {"publication": "Alabama", "page_number": 4, "column": 1, "x": 837, "y": 1702, "width": 900, "height": 52, '
+    '"entry_id": "Alab_004_01_00312", "city_id": "Alab_003_00_00190", "name": "HANNA, HENRY PIERCE", '
+    '"AMA_member": True, "col": False, "birth_year": "86", "AMA_fellow": False, "schools": "Ala.4, \'12", '
+    '"license_year": "13", "not_in_practice": False, "address": "1518 N. Allen St.", "office": "First Natl. Bank Bldg.", '
+    '"hours": ""11-1, 3-5"", "societies": "", "specialty": "Pd", "military": "▼", "other_info": ""},\n'
+    '  {"publication": "Alabama", "page_number": 4, "column": 2, "x": 1477, "y": 324, "width": 574, "height": 44, '
+    '"entry_id": "Alab_004_02_00317", "city_id": "Alab_003_00_00190", "name": "Harris, Hardy Fleming", '
+    '"AMA_member": False, "col": True, "birth_year": "", "AMA_fellow": False, "schools": "Tenn.7,\'05", '
+    '"license_year": "5", "not_in_practice": False, "address": "808 S. 16th St.", "office": "2709 29th Ave", "hours": "", '
+    '"societies": "", "specialty": "", "military": "", "other_info": ""}\n'
+    ']\n'
     "For every entry, keep existing information (including publication, page number, " 
-    "column number, id, city id, and its bounding box) and leave it unchanged. "
+    "column number, entry id, city id, and its bounding box) and leave it unchanged. "
     "Ignore the entry type. "
     "Only use the full_text field to determine the values of the following fields. "
     "Doctor entries can include a number of different elements, but most have only "
     "the doctor's name, their medical school information (represented as a state abbreviation, " 
-    "an ID number, and a 2-digit graduation year or as ◊ if the information is missing), "
+    "an ID number, and a 2-digit graduation year or as ◊ or △ if the information is missing), "
     "and a 2-digit license year in parentheses after an l or I. "
     "If the license year is unknown, a t appears in place of a year; "
     "encode it as -2. A ♁ or ‡ can appear in parentheses, instead of licensing "
@@ -140,134 +154,24 @@ MODEL_PROMPT = (
     "schools is N.C.3, '09; license_year is 10; and address is 1701 Mulberry St. "
 )
 
-script_dir = Path(__file__).resolve().parent
-project_root = script_dir.parent
-
-# Set up file paths
-input_file = project_root / "data" / "03_processed_batch" / "doc_entries_4states.csv"
-output_dir = project_root / "data" / f"04_extracted_entries_gemini_4states"
-output_file = output_dir / "amd_1918_doc_entries.csv" 
-prompts_file = output_dir / "extracted_entries_prompts.jsonl"
-responses_file = output_dir / "extracted_entries_responses.jsonl"
-output_dir.mkdir(parents=True, exist_ok=True)
-
-# 1. Load the data, group by column
-if not input_file.exists():
-    print(f"Error: {input_file} not found.")
-    exit(1)
-
-all_inputs = pd.read_csv(input_file, encoding="utf-8")
-
-# create file, write headers for CSVs
-with open(output_file, 'w', encoding='utf-8', newline='') as doc_csv:
-    doc_writer = csv.DictWriter(doc_csv, DocEntry.model_fields.keys(), restval="")
-    doc_writer.writeheader()
-
-# cache system prompt
-cache = client.caches.create(
-    model=model_name,
-    config=types.CreateCachedContentConfig(
-        system_instruction=MODEL_PROMPT
+if True:
+    batch_prompt_dataframe(
+        client,
+        logger, 
+        MODEL_NAME, 
+        MODEL_PROMPT, 
+        "doc", 
+        DocEntry, 
+        DocEntries, 
+        data_set = "2026.03.18",
+        only_count_tokens=False,#True,
+        max_batches_at_once=1,#80,
+        max_entries_per_batch=20, #50, prompts sized <=5400, but never left pending; 20 had prompts sized <= 2200
+        initial_wait_seconds=60 * 8, # 8 minutes
+        followup_wait_seconds= 60 * 1, # 1 minute
+        record_prompts_responses=True
     )
-)
-
-# limit to MAX_ENTRIES_SENT
-next_entry = 0
-while next_entry < len(all_inputs):
-    
-    # 2. Save df and upload it
-    last_entry = min(next_entry + MAX_ENTRIES_SENT, len(all_inputs))
-    current_df = all_inputs.iloc[next_entry:last_entry]
-    file = current_df.to_csv(index=False, encoding="utf-8") # produces string if not given filetten
-    
-    # upload blocks file
-    # file = client.files.upload(
-    #     file=temp_file,
-    #     config=types.UploadFileConfig(mime_type='text/csv')#(mime_type='text/csv; charset=UTF-8')
-    # )
-
-    # 3. Send parsing prompt
-    logger.info(f"prompting for docs ({next_entry}:{last_entry}) out of {len(all_inputs)} at {datetime.datetime.now()}")
-    print(f"prompting for docs ({next_entry}:{last_entry}) out of {len(all_inputs)} at {datetime.datetime.now()}")
-
-    attempt = 0
-    while attempt < MAX_ATTEMPTS:
-        print(f"attempt {attempt + 1}/{MAX_ATTEMPTS}")
-        logger.info(f"attempt {attempt + 1}/{MAX_ATTEMPTS}")
-        try:
-            # save prompt for tuning
-            with open(prompts_file, 'a') as f:
-                f.write(json.dumps(
-                    {
-                        "systemInstruction" : types.Content(role="system", parts = [types.Part(text=MODEL_PROMPT)]).model_dump(exclude_none=True),
-                        "contents": types.UserContent([file]).model_dump(exclude_none=True)
-                    }
-                )+ '\n')
-            #response_stream = client.models.generate_content_stream(
-            response = client.models.generate_content(
-                model=model_name,
-                contents=[file],
-                config=types.GenerateContentConfig(
-                     cached_content=cache.name,
-                    # systemInstruction = types.Content(role="system", parts = [types.Part(text=MODEL_PROMPT)]),
-                    temperature=0.0,
-                    thinking_config=types.ThinkingConfig(thinking_level="MINIMAL"),
-                    response_mime_type="application/json", 
-                    response_json_schema=DocEntries.model_json_schema(),
-                )
-            )
-            response_text = response.text.strip()
-            logger.debug(response_text)
-
-            # Clean markdown formatting if present
-            if response_text.startswith('```'):
-                lines = response_text.split('\n')
-                response_text = '\n'.join(lines[1:-1]) if len(lines) > 2 else response_text
-                response_text = response_text.replace('```json', '').replace('```', '').strip()
-
-            json_entries = json.loads(response_text)
-            with open(responses_file, 'a') as f:
-                f.write(json.dumps(json_entries) + '\n')
-            doc_entries = json_entries["doc_entries"]
-
-            logger.info(f"received {len(doc_entries)} doc entries at {datetime.datetime.now()}")
-            print(f"\treceived {len(doc_entries)} doc entries at {datetime.datetime.now()}")
-
-            # Do some verification
-            if len(doc_entries) != len(current_df):
-                print(f"\tunexpected number of docs, expected {len(current_df)} but got {len(doc_entries)}")
-                logger.error(f"\tunexpected number of docs, expected {len(current_df)} but got {len(doc_entries)}")
-
-            # 4. Save to CSVs
-            with open(output_file, 'a', encoding='utf-8', newline='') as doc_csv:
-                doc_writer = csv.DictWriter(doc_csv, DocEntry.model_fields.keys(), restval="")
-                for e in doc_entries:
-                    doc_writer.writerow(e)
-
-        except json.JSONDecodeError as e:
-            print(f"\n    JSON parse error: {e}")
-            logger.error(f"JSON parse error: {e}")
-            time.sleep(1)
-            attempt += 1
-        except Exception as e:
-            print(f"\n    Gemini API error: {e}")
-            logger.error(f"Gemini API error: {e}")
-            time.sleep(2 ** attempt)
-            attempt += 1
-        else:
-            break # if not errors, break out of attempts loop
-    if attempt == MAX_ATTEMPTS:
-        logger.error(f"Failed after {attempt} attempts")
-        print(f"Failed after {attempt} attempts")
-
-    # 5. Clean up, prepare for next iteration
-    # client.files.delete(name=file.name) # Delete remote file
-    # temp_file.unlink(missing_ok=True) # delete local file
-    next_entry += MAX_ENTRIES_SENT
-# end grouping while
-    
-client.caches.delete(name=cache.name)
+else:
+    output_file = Path(__file__).resolve().parent.parent / f"04_extracted_entries_gemini_2026.03.18" / f"amd_1918_doc_entries.csv" 
+    wait_and_process_jobs(client, logger, 60 * 1, lambda job : process_job_output(client, logger, job, "doc", DocEntry, output_file))
 client.close()
-print(f"\n✓ Success!")
-print(f"Docs saved to: {output_file}")
-logger.error(f"Saved Docs entries to: {output_file}")

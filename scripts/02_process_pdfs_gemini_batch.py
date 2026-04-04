@@ -5,7 +5,6 @@ Modified for new API and batching.
 Processes preprocessed PDF snippets using Gemini Vision API to extract text and bounding boxes.
 """
 # TODO: Change to access files from Cloud Bucket
-# TODO: Cache system instruction/model prompt for reuse, more throughput
 
 import datetime
 import json
@@ -29,9 +28,43 @@ logging.basicConfig(
   encoding='utf-8', 
   level=logging.WARNING) ## <=================== Change logging level here
 
+# ***************************** constants *****************************
+SKIP_TEXT = "******* KEEPS FAILING! SKIPPING FOR NOW *******"
+INITIAL_WAIT_SECONDS = 60 * 5 # 5 minutes # * 10 # 10 minutes
+FOLLOWUP_WAIT_SECONDS = 60 #* 5 # 5 minutes
+MAX_BATCH = 8 # was 4
+USER_PROMPT = "Extract all text from this image of a column from a directory. "
+MODEL_PROMPT = (
+    "Your role is to perform OCR on the images you are prompted with. "
+    "Extract all text from these images of columns from a medical directory. "
+    "For each line of text, provide the text content, its bounding box coordinates "
+    "in pixels, and a confidence score (between 0 and 1). "
+    "Lines of text extend horizontally across the whole column. "
+    "Return ONLY a JSON array. Coordinates should be exact, in pixels. "
+    "Include all text, even small fragments. "
+    "Include all symbols, punctuation, and line breaks, even if they look like noise. "
+    "Encode special characters properly in JSON as UTF-8 characters, standardizing them across all images. "
+    "For instance, there is a small dark cadeuceus at the end of some lines, occasionally followed by a G or N, encode that symbol as ▼. "
+    "Places to expect ▼ include \"(l'08) ; ▼\", \"▼G\", \"'03; (l'03); 1444 N. 31st St.; U*; ▼G\", and \"Marx Bldg.; (A28); S*; ▼N\". "
+    "Encode a sun cross or wheel cross that can appear between some right parentheses and dashes as ⊕. "
+    "Places to expect ⊕ incude \"McCOLLUM, HERMAN E. (b'77)⊕-Mo.7,\", \"OLSON, EVALD (b'66)⊕-Kan.3,'07; (l'16)\", "
+    "\"⊕-Mass.7,'06; Member Mass. Med. Soc.;\", and \"⊕-Pa.1,'00; (l'00); 491 E. State St.;\". "
+    "Also, a diamond can appear after dashes and should be encoded as ◊. "
+    "Places to expect ◊ include \"Bailey, Alexander Henry-◊; (l'89)\" and \"FREEMAN, JOHN F.-◊; 370 W. 10th St.;\". "
+    "Stars can appear after one- or two-letter abbreviations and should be encoded as ★. "
+    "Places to expect ★ include \"Bldg.; 2-4, 7-8; S★\" and \"office, 314 W. 4th St.; (G1,3); R★\". "
+    "† can appear in parentheses after an l, 1, or I, as in "
+    "\"(l†)\", \"Harris, J. Monroe-◊; (l'†); not in practice\", or \"'77, N.Y.5,'77; (1†) ; (A28) ; S\". "
+    "♁ or ‡ can appear by themselves in parentheses, "
+    "as in \"'89; (♁); S\" or \"Murdock, Jos. L. (b'62)-Ga.10,'93; (‡)\". "
+    "For punctuation like dashes, quotes, and apostrophes, use standard ASCII equivalents. "
+    "Avoid encoding anything as non-ASCII characters beyond ▼, ⊕, ◊, ★, †, ♁, and ‡. "
+    "Other characters decrease the confidence score. "
+)
+
 # --- Gemini API Configuration --- 
 API_KEY = os.getenv('GEMINI_API_KEY', 'YOUR_API_KEY')
-model_name ='gemini-flash-latest' # gemini-3-flash-preview <- is what this has been in 2/2026
+MODEL_NAME ='gemini-flash-latest' # gemini-3-flash-preview <- is what this has been in 2/2026
 
 if API_KEY == 'YOUR_API_KEY' or not API_KEY:
     print("ERROR: Gemini API key is not set.")
@@ -41,8 +74,16 @@ if API_KEY == 'YOUR_API_KEY' or not API_KEY:
 # Initialize Gemini
 print("Initializing Gemini for OCR...")
 #print(f"Key: {API_KEY}")
-logger.info(f"Initializing Gemini for OCR... with {model_name}")
+logger.info(f"Initializing Gemini for OCR... with {MODEL_NAME}")
 client = genai.Client(api_key=API_KEY)
+
+# cache system prompt
+cache = client.caches.create(
+    model=MODEL_NAME,
+    config=types.CreateCachedContentConfig(
+        system_instruction=MODEL_PROMPT + MODEL_PROMPT
+    )
+)
 
 class NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -81,7 +122,7 @@ def initiate_batch(requests, batch_file_path, current_batch_job_file, initial_wa
     
     ## 3.3 Create batch processing job
     batch_job_from_file = client.batches.create(
-        model=model_name,
+        model=MODEL_NAME,
         src=uploaded_batch_requests.name,
         config=types.CreateBatchJobConfig(display_name='Directory OCR Batch Job')
     )
@@ -130,60 +171,25 @@ def gemini_prepare_snippet(image_path: Path) -> dict:
     try:
         # upload image
         file = client.files.upload(file=image_path)
-
-        user_prompt = "Extract all text from this image of a column from a directory. "
-        model_prompt = (
-            "Extract all text from these images of columns from a directory. "
-            "For each line of text, provide the text content, its bounding box coordinates, and a confidence score (between 0 and 1). "
-            "Lines of text extend horizontally across the whole column. "
-            "Return ONLY a JSON array. Coordinates should be in pixels. "
-            "Include all text, even small fragments. "
-            "Include all symbols, punctuation, and line breaks, even if they look like noise. "
-            "Encode special characters properly in JSON as UTF-8 characters, standardizing them across all images. "
-            "For instance, there is a small dark cadeuceus at the end of some lines, occasionally followed by a G or N, encode that symbol as ▼. "
-            "Encode a sun cross or wheel cross that can appear between some right parentheses and dashes as ⊕. "
-            "Also, a diamond can appear after dashes and should be encoded as ◊. "
-            "For punctuation like dashes, quotes, and apostrophes, use standard ASCII equivalents."
-        )
                 
         return {
             "key": request_key,
             "request": {
                 "contents": types.UserContent(
                     [
-                        types.Part.from_text(text=user_prompt),
+                        types.Part.from_text(text=USER_PROMPT),
                         types.Part.from_uri(file_uri=file.uri, mime_type=file.mime_type)
                     ]
                 ).model_dump(exclude_none=True),
                 "generationConfig": types.GenerateContentConfig(
                     response_mime_type="application/json", 
                     response_json_schema=OCRResult.model_json_schema(),
+                    thinking_config=types.ThinkingConfig(thinking_level="MINIMAL"), 
                     temperature=0.0,
-                    max_output_tokens=100000 # default is 65,536; expanding because some columns cut off midway
                 ).model_dump(exclude_none=True),
-                "systemInstruction": types.ModelContent(model_prompt).model_dump(exclude_none=True)
+                "cachedContent": cache.name, 
             }
         }
-
-        # return {
-        #     "key": request_key,
-        #     "request": {
-        #         "contents": [{ 
-        #             "parts": [ 
-        #                 { "text": prompt },
-        #                 { "fileData": {
-        #                     "mimeType": file.mime_type,
-        #                     "fileUri": file.uri
-        #                     } 
-        #                 }
-        #             ]
-        #         }],
-        #         "generationConfig": { 
-        #             "responseMimeType": "application/json",
-        #             "responseJsonSchema":  OCRResult.model_json_schema() # works
-        #         }
-        #     }
-        # }
 
     except Exception as e:
         print(f"\n    Error preparing snippet {request_key}: {e}")
@@ -212,12 +218,12 @@ def prepare_batch_requests(all_metadata: dict, df_done: pd.DataFrame, offsets_fi
                     if ((df_done['pub'] == pdf_name) & 
                             (df_done['page'] == page_num) &
                             (df_done['col'] == col_idx)).any():
-                        logger.info(f"Previously processed column {col_idx}")
-                        print(f"Previously processed", end=" ", flush=True)
+                        # logger.info(f"Previously processed {pdf_name}, Page {page_num}.{col_idx}")
+                        # print(f"Previously processed {pdf_name}, Page {page_num}.{col_idx}")
                         continue
 
-                    print(f"Packaging Snippet for: {pdf_name}, Page {page_num}, {col_idx}")
-                    logger.info(f"Packaging Snippet for: {pdf_name}, Page {page_num}, {col_idx}")
+                    print(f"Packaging Snippet for: {pdf_name}, Page {page_num}.{col_idx}")
+                    logger.info(f"Packaging Snippet for: {pdf_name}, Page {page_num}.{col_idx}")
                     
                     snippet_image_path = snip['path']
                     if not Path(snippet_image_path).exists():
@@ -331,8 +337,14 @@ def process_batch_ocr_output_content(content: str, offsets_file: Path, output_fi
             if line:
                 parsed_response = json.loads(line)
                 # Pretty-print the JSON for readability
+                if "error" in parsed_response.keys():
+                    # hit an error not an expected response
+                    logger.error(json.dumps(parsed_response, indent=2))
+                    logger.error("-" * 20)
+                    continue
                 logger.debug(json.dumps(parsed_response, indent=2))
                 logger.debug("-" * 20)
+                
                 content_response = types.GenerateContentResponse.model_validate(parsed_response["response"])
 
                 finish_reason = content_response.candidates[0].finish_reason#parsed_response["response"]["candidates"][0]["finishReason"]
@@ -348,10 +360,10 @@ def process_batch_ocr_output_content(content: str, offsets_file: Path, output_fi
                                 "pub": info["state"],
                                 "page": info["page"],
                                 "col": info["column"],
-                                "text": "******* KEEPS FAILING! SKIPPING FOR NOW *******",
+                                "text": SKIP_TEXT,
                                 "conf": 0.0,
-                                "x": 0.0,
-                                "y": 0.0,
+                                "x": 0,
+                                "y": 0,
                                 "width": 0,
                                 "height": 0
                             }
@@ -369,7 +381,7 @@ def process_batch_ocr_output_content(content: str, offsets_file: Path, output_fi
                 )
 
                 # find offsets for this snippet
-                offset_row = offsets_file_df[offsets_file_df['key'] == parsed_response["key"]].iloc[0]
+                # offset_row = offsets_file_df[offsets_file_df['key'] == parsed_response["key"]].iloc[0]
 
                 for block in gemini_output:
                     try:
@@ -379,8 +391,8 @@ def process_batch_ocr_output_content(content: str, offsets_file: Path, output_fi
                                 "col": info["column"],
                                 "text": block["text"].strip(),
                                 "conf": round(block["confidence"], 4),
-                                "x": block["x"] + offset_row['x_offset'],
-                                "y": block["y"] + offset_row['y_offset'],
+                                "x": block["x"],# + offset_row['x_offset'],
+                                "y": block["y"],# + offset_row['y_offset'],
                                 "width": block["width"],
                                 "height": block["height"]
                             }
@@ -412,7 +424,7 @@ def wait_for_job(job_name, followup_wait_seconds):
         exit(1)
     return batch_job
 
-def main(initial_wait_seconds=-1, followup_wait_seconds=-1, max_to_batch = 4):
+def main(initial_wait_seconds=-1, followup_wait_seconds=-1, max_to_batch = MAX_BATCH):
       
     # 1. Setup Project Paths
     script_dir = Path(__file__).parent
@@ -426,12 +438,13 @@ def main(initial_wait_seconds=-1, followup_wait_seconds=-1, max_to_batch = 4):
     current_batch_job_file = output_dir / "current_batch_job.txt"
     offsets_file = output_dir / "snippet_offsets.csv"
     result_file_path = output_dir / 'batch_results.jsonl'
-    output_file = output_dir / "ocr_output.jsonl"
+    output_file = output_dir / "ocr_output_fill_in.jsonl"
+    done_file = output_dir / "ocr_output.jsonl" # output_file
 
     # Check if batch job is already in progress, based on file
     if current_batch_job_file.exists():
         print(f"A batch job is already in progress, checking {current_batch_job_file} for job name.")
-        logger.error(f"A batch job is already in progress, checking {current_batch_job_file} for job name.")
+        logger.warning(f"A batch job is already in progress, checking {current_batch_job_file} for job name.")
         with open(current_batch_job_file, 'r') as f:
             job_name = f.read().strip()
             if not job_name:
@@ -455,7 +468,14 @@ def main(initial_wait_seconds=-1, followup_wait_seconds=-1, max_to_batch = 4):
         print(f"Packaging Snippets for Batch OCR. Batch requests will be saved to: {batch_file_path}")
         logger.info(f"Packaging Snippets for Batch OCR. Batch requests will be saved to: {batch_file_path}")
         try:
-            df_done = pd.read_json(output_file, lines=True)[['pub', 'page', 'col']].drop_duplicates()
+            df_done = pd.read_json(done_file, lines=True)
+            df_done = df_done[df_done['text'] != SKIP_TEXT]
+
+            if done_file != output_file:
+                df_done2 = pd.read_json(output_file, lines=True)
+                df_done = pd.concat([df_done, df_done2], axis=0, ignore_index=True)
+
+            df_done = df_done[['pub', 'page', 'col']].drop_duplicates()
         except:
             df_done = pd.DataFrame(columns=['pub', 'page', 'col'])
 
@@ -498,15 +518,13 @@ def main(initial_wait_seconds=-1, followup_wait_seconds=-1, max_to_batch = 4):
     logger.error(f"\n✓ OCR Process Complete. Data in: {output_file}")
 
 if __name__ == "__main__":
-    INITIAL_WAIT_SECONDS = 60 * 10 # 10 minutes
-    FOLLOWUP_WAIT_SECONDS = 60 * 5 # 5 minutes
-    for i in range(1000):
+    for i in range(100):
         try:
             print("*** Iteration", i, "***")
             main(initial_wait_seconds=INITIAL_WAIT_SECONDS, followup_wait_seconds=FOLLOWUP_WAIT_SECONDS)
         except Exception as e:
             print("*** main loop exception, pressing on ***")
-            print(e)
+            print(type(e).__name__, "–", e)
             script_dir = Path(__file__).parent
             project_root = script_dir if (script_dir / "data").exists() else script_dir.parent
             output_dir = project_root / "data" / "02_raw_batch"
@@ -525,5 +543,5 @@ if __name__ == "__main__":
 
     # process_batch_ocr_output_file(result_file_path, offsets_file, output_file)
 
-
+client.caches.delete(name=cache.name)
 client.close()
