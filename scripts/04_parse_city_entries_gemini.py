@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from google.genai import errors
 from _ExtractEntriesBatchProcessor import *
 
 import logging
@@ -7,7 +8,7 @@ logging.basicConfig(
   filename='04_parse_entries_gemini.log', 
   filemode='a', 
   encoding='utf-8', 
-  level=logging.INFO) ## <=================== Change logging level here
+  level=logging.WARNING) ## <=================== Change logging level here
 
 
 class CityEntry(BaseModel):
@@ -29,6 +30,8 @@ class CityEntry(BaseModel):
 class CityEntries(BaseModel):
     city_entries: list[CityEntry]
 
+INITIAL_WAIT_SECONDS = 60 * 8 # 8 minutes
+FOLLOWUP_WAIT_SECONDS = 60 * 1 # 1 minute
 MODEL_NAME ='gemini-3-flash-preview'
 MODEL_PROMPT = (
     "Parse these ordered entries from a medical directory, each line is a complete entry. "
@@ -51,18 +54,54 @@ MODEL_PROMPT = (
     "individual pieces of information from the text input. "
 )
 
-batch_processor = ExtractEntriesBatchProcessor(
-    logger, 
-    MODEL_NAME, 
-    MODEL_PROMPT, 
-    "city", 
-    CityEntry, 
-    CityEntries, 
-    only_count_tokens=False,#True,
-    max_batches_at_once=1,#80,
-    max_entries_per_batch=40, 
-    initial_wait_seconds=60 * 8, # 8 minutes
-    followup_wait_seconds= 60 * 1, # 1 minute
-)
-input_file, output_dir, output_file_name = gen_extract_entries_paths("city", "2026.03.18")
-batch_processor.batch_prompt(input_file, output_dir, output_file_name)
+def create_batch_processor():
+    return ExtractEntriesBatchProcessor(
+        logger, 
+        MODEL_NAME, 
+        MODEL_PROMPT, 
+        "city", 
+        CityEntry, 
+        CityEntries, 
+        only_count_tokens=False,#True,
+        max_batches_at_once=100, # the Batch API max
+        max_entries_per_batch=40, 
+        initial_wait_seconds=INITIAL_WAIT_SECONDS, # 8 minutes
+        followup_wait_seconds=FOLLOWUP_WAIT_SECONDS, # 1 minute
+    )
+
+if __name__ == "__main__":
+    # 1. Setup Project Paths
+    proj_paths = gen_extract_entries_paths("city", "2026.03.18")
+
+    batch_processor = None
+
+    for i in range(100):
+        try:
+            print("*** Iteration", i, "***")
+            if not batch_processor:
+                batch_processor = create_batch_processor()
+            batch_processor.batch_prompt(
+                *proj_paths,
+                # record_prompts_responses=True
+            )
+        except Exception as e:
+            if isinstance(e, errors.APIError) and (e.code == 429 or e.code == 503):
+                exception = "RESOURCE_EXHAUSTED" if e.code == 429 else "SERVICE UNAVAILABLE"
+                print(f"*** main loop {exception} exception, pausing for {INITIAL_WAIT_SECONDS/60} at {datetime.datetime.now()}... ***")
+                logger.error(f"*** main loop {exception} exception, pausing for {INITIAL_WAIT_SECONDS/60} at {datetime.datetime.now()}... ***")
+                time.sleep(INITIAL_WAIT_SECONDS)
+            else:
+                print("*** main loop exception, clearing batches, pressing on ***")
+                print(type(e).__name__, "-", e)
+                # something went very wrong, scrub any ongoing batch jobs and processor
+                for job in batch_processor.client.batches.list():
+                    try:
+                        batch_processor.client.batches.delete(name=job.name)
+                    except:
+                        pass
+                try:
+                    batch_processor = None
+                except:
+                    pass
+                pass
+

@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from typing import Literal
+from google.genai import errors
 from _ExtractEntriesBatchProcessor import *
 
 import logging
@@ -8,7 +9,7 @@ logging.basicConfig(
   filename='04_parse_entries_gemini.log', 
   filemode='a', 
   encoding='utf-8', 
-  level=logging.INFO) ## <=================== Change logging level here
+  level=logging.WARNING) ## <=================== Change logging level here
 
 
 class DocEntry(BaseModel):
@@ -40,6 +41,8 @@ class DocEntry(BaseModel):
 class DocEntries(BaseModel):
     doc_entries: list[DocEntry]
 
+INITIAL_WAIT_SECONDS = 60 * 8 # 8 minutes
+FOLLOWUP_WAIT_SECONDS = 60 * 1 # 1 minute
 MODEL_NAME ='gemini-3-flash-preview'
 MODEL_PROMPT = (
     "Parse these ordered entries from a medical directory, each line is a complete entry. "
@@ -126,21 +129,52 @@ MODEL_PROMPT = (
     "schools is N.C.3, '09; license_year is 10; and address is 1701 Mulberry St. "
 )
 
-batch_processor = ExtractEntriesBatchProcessor(
-    logger, 
-    MODEL_NAME, 
-    MODEL_PROMPT, 
-    "doc", 
-    DocEntry, 
-    DocEntries, 
-    only_count_tokens=False,#True,
-    max_batches_at_once=1,#80,
-    max_entries_per_batch=20, #50, prompts sized <=5400, but never left pending (same with 40); 20 had prompts sized <= 2200
-    initial_wait_seconds=60 * 8, # 8 minutes
-    followup_wait_seconds= 60 * 1, # 1 minute
-)
+def create_batch_processor():
+    return ExtractEntriesBatchProcessor(
+        logger, 
+        MODEL_NAME, 
+        MODEL_PROMPT, 
+        "doc", 
+        DocEntry, 
+        DocEntries, 
+        only_count_tokens=False,#True,
+        max_batches_at_once=100, # Batch API max # 40,#80,
+        max_entries_per_batch=20, #50, prompts sized <=5400, but never left pending (same with 40); 20 had prompts sized <= 2200
+        initial_wait_seconds=INITIAL_WAIT_SECONDS, # 8 minutes
+        followup_wait_seconds=FOLLOWUP_WAIT_SECONDS, # 1 minute
+    )
 
-batch_processor.batch_prompt(
-    *gen_extract_entries_paths("doc", "2026.03.18"),
-    # record_prompts_responses=True
-)
+if __name__ == "__main__":
+    # 1. Setup Project Paths
+    proj_paths = gen_extract_entries_paths("doc", "2026.03.18")
+
+    batch_processor = None
+
+    for i in range(100):
+        try:
+            print("*** Iteration", i, "***")
+            if not batch_processor:
+                batch_processor = create_batch_processor()
+            batch_processor.batch_prompt(
+                *proj_paths,
+                # record_prompts_responses=True
+            )
+        except Exception as e:
+            if isinstance(e, errors.APIError) and e.code == 429:
+                print(f"*** main loop RESOURCE_EXHAUSTED exception, pausing for {INITIAL_WAIT_SECONDS * 2/60} at {datetime.datetime.now()}... ***")
+                logger.error(f"*** main loop RESOURCE_EXHAUSTED exception, pausing for {INITIAL_WAIT_SECONDS* 2/60} at {datetime.datetime.now()}... ***")
+                time.sleep(INITIAL_WAIT_SECONDS * 2)
+            else:
+                print("*** main loop exception, pressing on ***")
+                print(type(e).__name__, "-", e)
+                # something went very wrong, scrub any ongoing batch jobs and processor
+                for job in batch_processor.client.batches.list():
+                    try:
+                        batch_processor.client.batches.delete(name=job.name)
+                    except:
+                        pass
+                try:
+                    batch_processor = None
+                except:
+                    pass
+                pass

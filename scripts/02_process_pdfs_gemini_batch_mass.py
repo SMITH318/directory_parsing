@@ -27,7 +27,7 @@ SKIP_TEXT = "******* KEEPS FAILING! SKIPPING FOR NOW *******"
 INITIAL_WAIT_SECONDS = 60 * 8 # 8 minutes
 FOLLOWUP_WAIT_SECONDS = 60 * 1 # 1 minute
 MAX_ITERATIONS = 1 # 1000
-MAX_BATCHES_AT_ONCE = 80 
+MAX_BATCHES_AT_ONCE = 100
 MODEL_NAME ='gemini-flash-latest' # gemini-3-flash-preview <- is what this has been in 2/2026
 MODEL_PROMPT = (
     "Your role is to perform OCR on the images you are prompted with. "
@@ -72,7 +72,7 @@ MODEL_PROMPT = (
     "Avoid encoding anything as non-ASCII characters beyond ▼, ⊕, ◊, ★, †, ♁, and ‡. "
     "Non-ASCII characters besides ▼, ⊕, ◊, ★, †, ♁, and ‡ decrease the confidence score. "
 )
-    
+
 def create_batch_processor():
     return OCRBatchProcessor(
         logger, 
@@ -82,7 +82,7 @@ def create_batch_processor():
         OCRLine, 
         OCRResult, 
         only_count_tokens=False,#True,
-        max_batches_at_once=1,#MAX_BATCHES_AT_ONCE,
+        max_batches_at_once=MAX_BATCHES_AT_ONCE,
         max_entries_per_batch=1,
         initial_wait_seconds=INITIAL_WAIT_SECONDS,
         followup_wait_seconds=FOLLOWUP_WAIT_SECONDS,
@@ -111,23 +111,22 @@ if __name__ == "__main__":
                 # [done_file], 
                 # record_prompts_responses=True
             )
-     
-        except errors.APIError as e:
-            if e.code == 429:
+        except Exception as e:
+            if isinstance(e, errors.APIError) and e.code == 429:
                 print(f"*** main loop RESOURCE_EXHAUSTED exception, pausing for {INITIAL_WAIT_SECONDS/60} at {datetime.datetime.now()}... ***")
                 logger.error(f"*** main loop RESOURCE_EXHAUSTED exception, pausing for {INITIAL_WAIT_SECONDS/60} at {datetime.datetime.now()}... ***")
                 time.sleep(INITIAL_WAIT_SECONDS)
-        # except Exception as e:
-            print("*** main loop exception, pressing on ***")
-            print(type(e).__name__, "–", e)
-            # something went very wrong, scrub any ongoing batch jobs and processor
-            for job in batch_processor.client.batches.list():
+            else:
+                print("*** main loop exception, pressing on ***")
+                print(type(e).__name__, "-", e)
+                # something went very wrong, scrub any ongoing batch jobs and processor
+                for job in batch_processor.client.batches.list():
+                    try:
+                        batch_processor.client.batches.delete(name=job.name)
+                    except:
+                        pass
                 try:
-                    batch_processor.client.batches.delete(name=job.name)
+                    batch_processor = None
                 except:
                     pass
-            try:
-                del batch_processor
-            except:
                 pass
-            pass
