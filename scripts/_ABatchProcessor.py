@@ -1,4 +1,6 @@
-
+from collections.abc import Generator
+from abc import ABC, abstractmethod
+from pydantic import ValidationError
 import datetime
 import json
 import gc
@@ -6,6 +8,7 @@ import os
 from pathlib import Path
 from google import genai
 from google.genai import types
+from google.genai import errors
 import time
 import pandas as pd
 import csv
@@ -43,6 +46,7 @@ class ABatchProcessor:
         self.initial_wait_seconds = initial_wait_seconds
         self.followup_wait_seconds = followup_wait_seconds
         self.max_attempts_per_prompt = max_attempts_per_prompt
+        self.make_next_request_gen = None
 
         # Initialize Gemini
         api_key = os.getenv('GEMINI_API_KEY', 'YOUR_API_KEY')
@@ -70,11 +74,25 @@ class ABatchProcessor:
         except:
             pass
         
-    # abstract
-    # def drop_some_finished(self, finished_df: pd.DataFrame) -> pd.DataFrame:
-    # def load_input(self, file_in: Path) -> pd.DataFrame:
-    # def load_finished(self, file_done: Path) -> pd.DataFrame:
-    # def df_columns_to_check_finished(self) -> list[str]:
+    @abstractmethod
+    def drop_some_finished(self, finished_df: pd.DataFrame) -> pd.DataFrame:
+        """Must be implemented by subclasses"""
+        pass
+    
+    @abstractmethod
+    def load_input(self, file_in: Path) -> pd.DataFrame:
+        """Must be implemented by subclasses"""
+        pass
+
+    @abstractmethod
+    def load_finished(self, file_done: Path) -> pd.DataFrame:
+        """Must be implemented by subclasses"""
+        pass
+    
+    @abstractmethod
+    def df_columns_to_check_finished(self) -> list[str]:
+        """Must be implemented by subclasses"""
+        pass
     
     def read_input_drop_completed(
             self,
@@ -91,14 +109,20 @@ class ABatchProcessor:
         # print(finished_df.columns)
         cols_to_check = self.df_columns_to_check_finished()
         keys_lambda = lambda row: '-'.join(row.values.astype(str))
-        finished_keys = finished_df[[col_tup[1] for col_tup in cols_to_check]].apply(keys_lambda, axis=1).drop_duplicates()
+        finished_keys = finished_df[
+            [col_tup[1] for col_tup in cols_to_check]
+        ].apply(keys_lambda, axis=1).drop_duplicates()
         # print(data_in.columns)
         return data_in[
-            ~data_in[[col_tup[0] for col_tup in cols_to_check]].apply(keys_lambda, axis=1).isin(finished_keys)
+            ~data_in[
+                [col_tup[0] for col_tup in cols_to_check]
+            ].apply(keys_lambda, axis=1).isin(finished_keys)
         ]
 
-    # abstract
-    # def prepare_for_request(self, request_df: pd.DataFrame) -> types.UserContent:
+    @abstractmethod
+    def prepare_for_request(self, request_df: pd.DataFrame) -> types.UserContent:
+        """Must be implemented by subclasses"""
+        pass
 
     def create_batch_request(
             self,
@@ -127,19 +151,80 @@ class ABatchProcessor:
             config=types.CreateBatchJobConfig(display_name = req_name)
         )
 
+    def create_extend_model_prompt_cache(self):
+        # if cache already exists, try to extend it
+        if self.cache:
+            try:
+                self.client.caches.update(
+                    name = self.cache.name,
+                    config  = types.UpdateCachedContentConfig(
+                        ttl=f'86400s' # 1 day
+                    )
+                )
+                return
+            except ValidationError as e:
+                self.logger.info(f"error updating cache '{self.cache.name}', assuming it has expired, create new cache")
+
+        # cache system prompt if large enough
+        model_prompt_tokens = self.client.models.count_tokens(model=self.model_name, contents=self.model_prompt).total_tokens
+        cache_model_prompt = model_prompt_tokens >= 1024
+        if self.only_count_tokens:
+            print("cached model prompt tokens:", model_prompt_tokens)
+        elif cache_model_prompt:
+            self.logger.info("Caching model prompt")
+            print("Caching model prompt")
+            self.cache = self.client.caches.create(
+                model=self.model_name,
+                config=types.CreateCachedContentConfig(
+                    system_instruction=self.model_prompt
+                )
+            )
+        else:
+            self.logger.info("Model prompt too small to cache")
+            print("Model prompt too small to cache")
+
     def prepare_batch_requests(
             self,
-            all_inputs: pd.DataFrame, 
-            prompts_file: Path = None,
+            num_jobs: int
         ) -> list[types.BatchJob]:
         """Prepare batch requests and upload images for Gemini Vision OCR processing."""
         """Store offsets for bounding box adjustment."""
         """Returns list of request dicts for batch processing."""
 
-        next_entry = 0
+        if not self.make_next_request_gen:
+            self.logger.info("No make_next_request_gen, will create in next iteration")
+            return []
+
+        # create or extend cache time
+        self.create_extend_model_prompt_cache()
         jobs = []
-        num_batches = 0
-        while next_entry < len(all_inputs) and num_batches < self.max_batches_at_once:
+        try:
+            for _ in range(num_jobs):
+                job = next(self.make_next_request_gen)
+                if job:
+                    jobs.append(job)
+        except StopIteration as e:
+            print(f"All inputs processed: {e}")
+            self.logger.info(f"All inputs processed: {e}")
+
+        gc.collect()
+        if len(jobs) == 0:
+            print(f"No jobs prepared, all finished(?). Exiting.")
+            self.logger.error(f"No jobs prepared, all finished(?). Exiting.")
+            exit(0)
+        print(f"Total jobs prepared: {len(jobs)}")
+        self.logger.info(f"Total jobs prepared: {len(jobs)}")
+        
+        return jobs
+    
+    def make_next_request(
+            self,
+            all_inputs: pd.DataFrame, 
+            prompts_file: Path = None,
+        ) -> Generator[types.BatchJob, None, None]:
+        
+        next_entry = 0
+        while next_entry < len(all_inputs):
             
             # 2. Save df and upload it
             if self.max_entries_per_batch == 1:
@@ -156,7 +241,7 @@ class ABatchProcessor:
 
             attempt = 0
             while attempt < self.max_attempts_per_prompt:
-                # try:
+                try:
                     request_key, prep_content = self.prepare_for_request(current_df)
                     if prompts_file:
                         # save prompt for tuning
@@ -172,68 +257,72 @@ class ABatchProcessor:
                             "\tprompt tokens:", 
                             self.client.models.count_tokens(model=self.model_name, contents=prep_content).total_tokens
                         )
+                        yield None
+                        break # attempt while
                     else:
-                        if self.cache:
-                            self.client.caches.update( # extend cache time
-                                name = self.cache.name,
-                                config  = types.UpdateCachedContentConfig(
-                                    ttl=f'86400s' # 1 day
-                                )
-                            )
                         job = self.create_batch_request(request_key, prep_content)
                         if job:
-                            jobs.append(job)
-                    
-                # except Exception as e:
-                #     print(f"\n    Error preparing job {request_key}, attempt {attempt + 1}/{self.max_attempts_per_prompt}: {e}")
-                #     self.logger.error(f"Error preparing job {request_key}, attempt {attempt + 1}/{self.max_attempts_per_prompt}: {e}")
-                #     attempt += 1
-                # else:
-                    next_entry += self.max_entries_per_batch
-                    num_batches += 1
-                    break # attempt while
+                            yield job
+                            break # attempt while
+                   
+                except Exception as e:
+                    if isinstance(e, errors.APIError) and e.code == 429:
+                        raise
+                    print(f"\n    Error preparing job {request_key}, attempt {attempt + 1}/{self.max_attempts_per_prompt}: {e}")
+                    self.logger.error(f"Error preparing job {request_key}, attempt {attempt + 1}/{self.max_attempts_per_prompt}: {e}")
+                    attempt += 1
             # end attempt while
-        # end batches while
+            next_entry += self.max_entries_per_batch                    
+            
 
-        gc.collect()
-        if len(jobs) == 0:
-            print(f"No jobs prepared, all finished(?). Exiting.")
-            self.logger.error(f"No jobs prepared, all finished(?). Exiting.")
-            exit(0)
-        print(f"Total jobs prepared: {len(jobs)}")
-        self.logger.info(f"Total jobs prepared: {len(jobs)}")
-        
-        return jobs
-
-    def get_finished_jobs(self)-> list[types.BatchJob]:
+    def get_finished_jobs(self)-> tuple[bool, list[types.BatchJob]]:
+        '''returns whether all existing jobs are still pending and list of finished jobs'''
         finished_jobs = []
         print(f"Checking for finished jobs at {datetime.datetime.now()}")
+        all_pending = True
         for batch_job in self.client.batches.list():
-            print(batch_job.display_name, batch_job.state.name, "created at", batch_job.create_time)
+            # print(batch_job.display_name, batch_job.state.name, "created at", batch_job.create_time)
+            if batch_job.state.name != 'JOB_STATE_PENDING':
+                all_pending = False
             if batch_job.state.name == 'JOB_STATE_FAILED':
                 print(f"Batch job error in {batch_job.display_name}: {batch_job.error}")
                 self.logger.error(f"Batch job error in {batch_job.display_name}: {batch_job.error}")
             elif batch_job.state.name in ('JOB_STATE_SUCCEEDED', 'JOB_STATE_CANCELLED'):
                 finished_jobs.append(batch_job)
             
-        print(f"{len(finished_jobs)} jobs finished")
-        self.logger.warning(f"{len(finished_jobs)} jobs finished")
+        # print(f"{len(finished_jobs)} jobs finished")
+        # self.logger.warning(f"{len(finished_jobs)} jobs finished")
         
-        return finished_jobs
+        return all_pending, finished_jobs
 
-    def wait_and_process_jobs(self, wait_seconds, output_file: Path, responses_file: Path | None = None):
+    def wait_and_process_jobs(self, output_file: Path, responses_file: Path | None = None):
+        all_pending_count = 0
+        all_pending_wait_sec = self.initial_wait_seconds
         while self.client.batches.list() and self.client.batches.list()[0]:
             print(f">={len(self.client.batches.list())} batch jobs pending")
-            finished_jobs = self.get_finished_jobs()
+            all_pending, finished_jobs = self.get_finished_jobs()
             if finished_jobs:
+                all_pending_count = 0
+                all_pending_wait_sec = self.initial_wait_seconds
                 print(f"Processing {len(finished_jobs)} finished jobs at {datetime.datetime.now()}")
-                self.logger.info(f"Processing {len(finished_jobs)} finished jobs at {datetime.datetime.now()}")
+                self.logger.warning(f"Processing {len(finished_jobs)} finished jobs at {datetime.datetime.now()}")
                 for job in finished_jobs:
                     # 5. Retrieve, process and save results
-                    success = self.process_job_output(job, output_file, responses_file)
+                    self.process_job_output(job, output_file, responses_file)
+                self.prepare_batch_requests(len(finished_jobs)) # start a number of jobs equal to what just finished
             else:
-                print(f"No finished jobs found at {datetime.datetime.now()}. Waiting {wait_seconds/60} minutes...")
-                self.logger.warning(f"No finished jobs found at {datetime.datetime.now()}. Waiting {wait_seconds/60} minutes...")
+                if all_pending:
+                    # every other all_pending, double wait time as long as it's under an hour
+                    if all_pending_count > 0 and all_pending_count % 2 == 0 and all_pending_wait_sec < 60 * 60:
+                        all_pending_wait_sec *= 2
+                    all_pending_count += 1
+                else:
+                    all_pending_count = 0
+                    all_pending_wait_sec = self.initial_wait_seconds
+                wait_seconds = all_pending_wait_sec if all_pending else self.followup_wait_seconds
+                wait_message = f"No finished jobs found at {datetime.datetime.now()}. {"All pending. " if all_pending else ""}Waiting {wait_seconds/60} minutes..."
+                print(wait_message)
+                self.logger.warning(wait_message)
                 time.sleep(wait_seconds)
 
 
@@ -249,13 +338,16 @@ class ABatchProcessor:
             self.logger.error(f"Job did not succeed, unexpected final state: {batch_job.state.name}")
             success = False
         else:
-            self.logger.debug(f"batch_job {batch_job}")
-            batch_job = self.client.batches.get(name=batch_job.name)
-            self.logger.debug(f"batch_job.dest {batch_job.dest}")
-            self.logger.debug(f"inlined_responses {batch_job.dest.inlined_responses}")
-            responses = batch_job.dest.inlined_responses
-            
-            success = self.process_job_output_content(batch_job.display_name, responses, output_file, responses_file)
+            try:
+                self.logger.debug(f"batch_job {batch_job}")
+                batch_job = self.client.batches.get(name=batch_job.name)
+                self.logger.debug(f"batch_job.dest {batch_job.dest}")
+                self.logger.debug(f"inlined_responses {batch_job.dest.inlined_responses}")
+                responses = batch_job.dest.inlined_responses
+                success = self.process_job_output_content(batch_job.display_name, responses, output_file, responses_file)
+            except Exception as e:
+                self.logger.warning(f"Exception processing {batch_job.name} output: {e}")
+                print(f"Exception processing {batch_job.name} output: {e}")
         self.client.batches.delete(name=batch_job.name)
         # exit(0)
         return success
@@ -302,9 +394,15 @@ class ABatchProcessor:
                     successful = False
         return successful
     
-    # abstract
-    # def save_job_output_content(self, display_name:str, response_text:str, output_file:Path, responses_file:Path|None = None) -> bool:
-    # def prep_output_file(self, output_file:Path)
+    @abstractmethod
+    def save_job_output_content(self, display_name:str, response_text:str, output_file:Path, responses_file:Path|None = None) -> bool:
+        """Must be implemented by subclasses"""
+        pass
+
+    @abstractmethod
+    def prep_output_file(self, output_file:Path):
+        """Must be implemented by subclasses"""
+        pass
 
     def batch_prompt(
             self,
@@ -325,7 +423,8 @@ class ABatchProcessor:
             responses_file = output_dir / "extracted_entries_responses.jsonl"
         
         # Check if any batch jobs are in progress
-        if self.client.batches.list() and self.client.batches.list()[0]:
+        if ((not self.only_count_tokens) and 
+            self.client.batches.list() and self.client.batches.list()[0]):
             print(f"Batch jobs already in progress.")
             self.logger.warning(f"Batch jobs already in progress.")
             
@@ -346,29 +445,14 @@ class ABatchProcessor:
             inputs = self.read_input_drop_completed(input_file, all_finished_files)
 
             # 2. Initiate batch requests
-            print(f"Initiating Batch OCR requests (n={self.max_batches_at_once})")
-            self.logger.info(f"Initiating Batch OCR requests (n={self.max_batches_at_once})")
-            # cache system prompt if large enough
-            model_prompt_tokens = self.client.models.count_tokens(model=self.model_name, contents=self.model_prompt).total_tokens
-            cache_model_prompt = model_prompt_tokens >= 1024
-            if self.only_count_tokens:
-                print("cached model prompt tokens:", model_prompt_tokens)
-            elif cache_model_prompt:
-                self.logger.info("Caching model prompt")
-                print("Caching model prompt")
-                self.cache = self.client.caches.create(
-                    model=self.model_name,
-                    config=types.CreateCachedContentConfig(
-                        system_instruction=self.model_prompt
-                    )
-                )
-            else:
-                self.logger.info("Model prompt too small to cache")
-                print("Model prompt too small to cache")
-            jobs = self.prepare_batch_requests(inputs, prompts_file)
+            print(f"Initiating Batch {self.entry_type_name} requests (n={self.max_batches_at_once})")
+            self.logger.info(f"Initiating Batch {self.entry_type_name} requests (n={self.max_batches_at_once})")
+            
+            self.make_next_request_gen = self.make_next_request(inputs, prompts_file)
+            jobs = self.prepare_batch_requests(self.max_batches_at_once)
 
             # 3. Wait for batch jobs to complete
-            if self.initial_wait_seconds > 0:
+            if not self.only_count_tokens and self.initial_wait_seconds > 0:
                 print(f"Waiting {self.initial_wait_seconds/60} minutes for {len(jobs)} batch jobs to complete at {datetime.datetime.now()}...")
                 self.logger.error(f"Waiting {self.initial_wait_seconds/60} minutes for {len(jobs)} batch jobs to complete at {datetime.datetime.now()}...")
                 time.sleep(self.initial_wait_seconds)
@@ -378,7 +462,7 @@ class ABatchProcessor:
                 exit(0)
         
         # 4. While any batch jobs are pending, check if any are done
-        self.wait_and_process_jobs(self.followup_wait_seconds, output_file, responses_file)
+        self.wait_and_process_jobs(output_file, responses_file)
 
         print(f"\n✓ Success! {self.entry_type_name} saved in: {output_file}")
         self.logger.error(f"Saved {self.entry_type_name} entries in: {output_file}")
