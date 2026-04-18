@@ -8,8 +8,8 @@ SKIP_TEXT = "******* KEEPS FAILING! SKIPPING FOR NOW *******"
 script_dir = Path(__file__).parent if '__file__' in dir() else Path.cwd()
 project_root = script_dir if (script_dir / "data").exists() else script_dir.parent
 
-target_dir = project_root / "data" / "02_raw_batch" 
-files_to_combine = ["ocr_output.jsonl", "ocr_output_fill_in.jsonl"]
+target_dir = project_root / "data" / "02_raw_batch_mass" 
+files_to_combine = ["ocr_output.jsonl"]#, "ocr_output_fill_in.jsonl"]
 paths_to_combine = [target_dir/f for f in files_to_combine]
 output_file = target_dir / "ocr_output_combined_sorted.jsonl"
 

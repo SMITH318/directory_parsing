@@ -27,7 +27,7 @@ RE_MAP = {
     #replace all white space with a space
     re.compile(r"\s"): " ",
     #replace multiple dashes and dash-like characters with single dash
-    re.compile(r"[-–—]"): "-",
+    re.compile(r"[-–—━]"): "-",
     #replace any colons with semi-colons
     re.compile(':'): ';',
     #replace commas and underscores with periods
@@ -41,9 +41,13 @@ RE_MAP = {
     #reduce multiples of any non-word character (space, punctuation) to single
     re.compile(r'(?P<char>\W)\1+'): r'\g<char>',
     #replace (δ) or (♂) with (♁)
-    re.compile(r'\([δ♂]\)'): r'(♁)',
-    #replace(#) with (‡)
+    re.compile(r'\([δ♂☁☉⚇⚁]\)'): r'(♁)',
+    #replace (#) with (‡)
     re.compile(r'\(#\)'): r'(‡)',
+    #replace -|; or -┇; with -◊;
+    re.compile(r'\- ?[|│┇╲╰╂] ?;'): r'-◊;',
+    #replace -|; or -┇; with -◊;
+    re.compile(r'\- ?[┳Δ] ?;'): r'-△;',
 }
 
 def clean_text(s: str) -> str:
@@ -101,7 +105,7 @@ def clean_lines(filename_in, filename_out):
 
 # __main__
 if __name__ == "__main__":
-    if True:
+    if False:
         # Setup project paths
         script_dir = Path(__file__).parent if '__file__' in dir() else Path.cwd()
         project_root = script_dir if (script_dir / "data").exists() else script_dir.parent
@@ -114,5 +118,6 @@ if __name__ == "__main__":
         clean_lines(input_file, output_file)
     else: #tests
         # print("'"+re.compile(r'(?P<char>\W)\1+').sub(r'\g<char>', ".;;... ''.")+"'")
-        clean_lines('clean_tests.txt', 'clean_tests_out.txt')
-    
+        # clean_lines('clean_tests.txt', 'clean_tests_out.txt')
+        print(clean_text("Cocciola, Louis-┇; (l 00); 2000, 12th"))
+        print(clean_text("Williams, Larkin Wiley (b'48)-╲; (l 88)"))
