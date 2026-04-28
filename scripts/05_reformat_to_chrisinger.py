@@ -200,13 +200,16 @@ if __name__ == "__main__":
     project_root = Path(__file__).parent
     project_root = project_root if (project_root / "data").exists() else project_root.parent
     DATA_SET = "2026.03.18"
-    input_file = project_root / "data" / f"04_extracted_entries_gemini_{DATA_SET}" / "amd_1918_doc_entries.csv"
-    city_file = project_root / "data" / f"04_extracted_entries_gemini_{DATA_SET}" / "amd_1918_city_entries.csv"
+    input_file = project_root / "data" / f"04_extracted_entries_gemini_{DATA_SET}" / "amd_1918_doc_entries_sorted_deduped.csv"
+    city_file = project_root / "data" / f"04_extracted_entries_gemini_{DATA_SET}" / "amd_1918_city_entries_sorted_deduped.csv"
     output_file = project_root / "data" / f"05_reformatted_entries_{DATA_SET}" / "amd_1918_reformatted.csv"
     
     # Check if input file exists
     if not input_file.exists():
         print(f"Error: Input file not found: {input_file}")
+        exit(1)
+    if output_file.exists():
+        print(f"Error: Output file already exists! Stopping: {output_file}")
         exit(1)
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
