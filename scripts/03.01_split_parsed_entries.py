@@ -12,9 +12,12 @@ cities_file = data_dir / "city_entries_2026.03.18.csv"
 
 combined_df = pd.read_csv(input_file, encoding="utf-8")
 
+def pub_to_id(pub:str) -> str:
+    return pub.replace("New ", "N").replace("North ", "N").replace("South ", "S").replace("West ", "W")[:4]
+
 combined_df["entry_id"] = combined_df.apply(
     lambda row: 
-        f'{row["publication"][:4]}_{row["page_number"]:03d}_{row["column"]:02d}_{row.name:05d}',
+        f'{pub_to_id(row["publication"])}_{row["page_number"]:03d}_{row["column"]:02d}_{row.name:06d}',
     axis = 1
 )
 
