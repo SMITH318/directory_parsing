@@ -1,4 +1,4 @@
-from _ABatchProcessor import *
+from _AStepConfiguration import *
 
 
 def gen_extract_entries_paths(entry_type_name: str, data_set: str) -> tuple[Path, Path, str]:
@@ -9,7 +9,7 @@ def gen_extract_entries_paths(entry_type_name: str, data_set: str) -> tuple[Path
     output_file_name =  f"amd_1918_{entry_type_name}_entries.csv" 
     return input_file, output_dir, output_file_name
 
-class ExtractEntriesBatchProcessor(ABatchProcessor):
+class ExtractEntriesStep(AStepConfiguration):
     # abstract
     def drop_some_finished(self, finished_df: pd.DataFrame) -> pd.DataFrame:
         return finished_df
@@ -24,7 +24,8 @@ class ExtractEntriesBatchProcessor(ABatchProcessor):
     
     # abstract
     def df_columns_to_check_finished(self) -> list[str]:
-        return [('publication', 'publication'), ('page_number', 'page_number'), ('column', 'column')] 
+        # return [('publication', 'publication'), ('page_number', 'page_number'), ('column', 'column')] 
+        return [('entry_id', 'entry_id')]
 
     # abstract
     def prepare_for_request(self, request_df: pd.DataFrame) -> tuple[str, types.UserContent]: # request key, content
@@ -39,14 +40,14 @@ class ExtractEntriesBatchProcessor(ABatchProcessor):
         return f"{self.entry_type_name}_{request_df.index[0]}_{request_df.index[-1]}", content
    
     # abstract
-    def save_job_output_content(self, display_name:str, response_text:str, output_file:Path, responses_file:Path|None = None) -> bool:
+    def save_job_output_content(self, logger: logging.Logger, display_name:str, response_text:str, output_file:Path, responses_file:Path|None = None) -> bool:
         entries = json.loads(response_text)
         if responses_file:
             with open(responses_file, 'a') as f:
                 f.write(json.dumps(entries) + '\n')
         # entries = json_entries[f"{entry_type_name}_entries"]
 
-        self.logger.info(f"received {len(entries)} {self.entry_type_name} entries at {datetime.datetime.now()}")
+        logger.info(f"received {len(entries)} {self.entry_type_name} entries at {datetime.datetime.now()}")
         print(f"\treceived {len(entries)} {self.entry_type_name} entries at {datetime.datetime.now()}")
 
         # 4. Save to CSV

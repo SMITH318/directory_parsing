@@ -1,7 +1,8 @@
 from pydantic import BaseModel
 from typing import Literal
 from google.genai import errors
-from _ExtractEntriesBatchProcessor import *
+from _ExtractEntriesStep import *
+from _BatchProcessor import *
 
 import logging
 logger = logging.getLogger(__name__)
@@ -130,13 +131,16 @@ MODEL_PROMPT = (
 )
 
 def create_batch_processor():
-    return ExtractEntriesBatchProcessor(
-        logger, 
+    step_config = ExtractEntriesStep(
         MODEL_NAME, 
         MODEL_PROMPT, 
         "doc", 
         DocEntry, 
-        DocEntries, 
+        DocEntries
+    )
+    return BatchProcessor(
+        step_config,
+        logger,
         only_count_tokens=False,#True,
         max_batches_at_once=100, # Batch API max # 40,#80,
         max_entries_per_batch=20, #50, prompts sized <=5400, but never left pending (same with 40); 20 had prompts sized <= 2200
@@ -160,12 +164,13 @@ if __name__ == "__main__":
                 # record_prompts_responses=True
             )
         except Exception as e:
-            if isinstance(e, errors.APIError) and e.code == 429:
-                print(f"*** main loop RESOURCE_EXHAUSTED exception, pausing for {INITIAL_WAIT_SECONDS * 2/60} at {datetime.datetime.now()}... ***")
-                logger.error(f"*** main loop RESOURCE_EXHAUSTED exception, pausing for {INITIAL_WAIT_SECONDS* 2/60} at {datetime.datetime.now()}... ***")
-                time.sleep(INITIAL_WAIT_SECONDS * 2)
+            if isinstance(e, errors.APIError) and (e.code == 429 or e.code == 503):
+                exception = "RESOURCE_EXHAUSTED" if e.code == 429 else "SERVICE UNAVAILABLE"
+                print(f"*** main loop {exception} exception, pausing for {INITIAL_WAIT_SECONDS/60} at {datetime.datetime.now()}... ***")
+                logger.error(f"*** main loop {exception} exception, pausing for {INITIAL_WAIT_SECONDS/60} at {datetime.datetime.now()}... ***")
+                time.sleep(INITIAL_WAIT_SECONDS)
             else:
-                print("*** main loop exception, pressing on ***")
+                print("*** main loop exception, clearing batches, pressing on ***")
                 print(type(e).__name__, "-", e)
                 # something went very wrong, scrub any ongoing batch jobs and processor
                 for job in batch_processor.client.batches.list():
@@ -173,8 +178,4 @@ if __name__ == "__main__":
                         batch_processor.client.batches.delete(name=job.name)
                     except:
                         pass
-                try:
-                    batch_processor = None
-                except:
-                    pass
-                pass
+                batch_processor = None

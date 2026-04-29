@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from google.genai import errors
-from _ExtractEntriesBatchProcessor import *
+from _ExtractEntriesStep import *
+from _BatchProcessor import *
 
 import logging
 logger = logging.getLogger(__name__)
@@ -55,13 +56,16 @@ MODEL_PROMPT = (
 )
 
 def create_batch_processor():
-    return ExtractEntriesBatchProcessor(
-        logger, 
+    step_config = ExtractEntriesStep(
         MODEL_NAME, 
         MODEL_PROMPT, 
         "city", 
         CityEntry, 
-        CityEntries, 
+        CityEntries
+    )
+    return BatchProcessor(
+        step_config,
+        logger,
         only_count_tokens=False,#True,
         max_batches_at_once=100, # the Batch API max
         max_entries_per_batch=40, 
@@ -99,9 +103,5 @@ if __name__ == "__main__":
                         batch_processor.client.batches.delete(name=job.name)
                     except:
                         pass
-                try:
-                    batch_processor = None
-                except:
-                    pass
-                pass
+                batch_processor = None
 

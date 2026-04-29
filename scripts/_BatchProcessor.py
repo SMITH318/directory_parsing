@@ -14,18 +14,15 @@ import pandas as pd
 import csv
 import logging
 from _clean_gemini import *
+from _AStepConfiguration import AStepConfiguration
 
 NUKE_ALL_ON_EXIT = False
 
-class ABatchProcessor:
+class BatchProcessor:
     def __init__(
             self, 
+            step_config: AStepConfiguration,
             logger: logging.Logger, 
-            model_name: str, 
-            model_prompt: str, 
-            entry_type_name: str, 
-            entry_type: type, 
-            entries_type: type, 
             only_count_tokens: bool, 
             max_batches_at_once: int, 
             max_entries_per_batch: int, 
@@ -34,12 +31,8 @@ class ABatchProcessor:
             max_attempts_per_prompt: int = 2, 
         ):
         self.cache = None
+        self.step_config = step_config
         self.logger = logger
-        self.model_name = model_name
-        self.model_prompt = model_prompt
-        self.entry_type_name = entry_type_name
-        self.entry_type = entry_type
-        self.entries_type = entries_type
         self.only_count_tokens = only_count_tokens
         self.max_batches_at_once = max_batches_at_once
         self.max_entries_per_batch = max_entries_per_batch
@@ -73,41 +66,21 @@ class ABatchProcessor:
             self.client.close()
         except:
             pass
-        
-    @abstractmethod
-    def drop_some_finished(self, finished_df: pd.DataFrame) -> pd.DataFrame:
-        """Must be implemented by subclasses"""
-        pass
-    
-    @abstractmethod
-    def load_input(self, file_in: Path) -> pd.DataFrame:
-        """Must be implemented by subclasses"""
-        pass
-
-    @abstractmethod
-    def load_finished(self, file_done: Path) -> pd.DataFrame:
-        """Must be implemented by subclasses"""
-        pass
-    
-    @abstractmethod
-    def df_columns_to_check_finished(self) -> list[str]:
-        """Must be implemented by subclasses"""
-        pass
     
     def read_input_drop_completed(
             self,
             file_in: Path, 
             finished_files: list[Path]
         ) -> pd.DataFrame:
-        data_in = self.load_input(file_in)
-        finished_data = [self.load_finished(file) for file in finished_files]
+        data_in = self.step_config.load_input(file_in)
+        finished_data = [self.step_config.load_finished(file) for file in finished_files]
         finished_df = pd.concat(finished_data, ignore_index=True)
         if len(finished_df):
-            finished_df = self.drop_some_finished(finished_df)
+            finished_df = self.step_config.drop_some_finished(finished_df)
         if not len(finished_df):
             return data_in
         # print(finished_df.columns)
-        cols_to_check = self.df_columns_to_check_finished()
+        cols_to_check = self.step_config.df_columns_to_check_finished()
         keys_lambda = lambda row: '-'.join(row.values.astype(str))
         finished_keys = finished_df[
             [col_tup[1] for col_tup in cols_to_check]
@@ -119,11 +92,6 @@ class ABatchProcessor:
             ].apply(keys_lambda, axis=1).isin(finished_keys)
         ]
 
-    @abstractmethod
-    def prepare_for_request(self, request_df: pd.DataFrame) -> types.UserContent:
-        """Must be implemented by subclasses"""
-        pass
-
     def create_batch_request(
             self,
             req_name:str, 
@@ -131,7 +99,7 @@ class ABatchProcessor:
         ) -> types.BatchJob:
 
         return self.client.batches.create(
-            model=self.model_name,
+            model=self.step_config.model_name,
             src=types.BatchJobSource( 
                 inlined_requests=
                 [
@@ -139,11 +107,11 @@ class ABatchProcessor:
                         contents = contents,
                         config = types.GenerateContentConfig(
                             response_mime_type="application/json",
-                            response_json_schema=self.entries_type.model_json_schema(),
+                            response_schema=self.step_config.entries_type,
                             thinking_config=types.ThinkingConfig(thinking_level="MINIMAL"), 
                             temperature=0.0,
                             cached_content=self.cache.name if self.cache else None,
-                            systemInstruction=None if self.cache else types.Content(role="system", parts = [types.Part(text=self.model_prompt)]),
+                            systemInstruction=None if self.cache else types.Content(role="system", parts = [types.Part(text=self.step_config.model_prompt)]),
                         )
                     )
                 ]
@@ -166,7 +134,7 @@ class ABatchProcessor:
                 self.logger.info(f"error updating cache '{self.cache.name}', assuming it has expired, create new cache")
 
         # cache system prompt if large enough
-        model_prompt_tokens = self.client.models.count_tokens(model=self.model_name, contents=self.model_prompt).total_tokens
+        model_prompt_tokens = self.client.models.count_tokens(model=self.step_config.model_name, contents=self.step_config.model_prompt).total_tokens
         cache_model_prompt = model_prompt_tokens >= 1024
         if self.only_count_tokens:
             print("cached model prompt tokens:", model_prompt_tokens)
@@ -174,9 +142,9 @@ class ABatchProcessor:
             self.logger.info("Caching model prompt")
             print("Caching model prompt")
             self.cache = self.client.caches.create(
-                model=self.model_name,
+                model=self.step_config.model_name,
                 config=types.CreateCachedContentConfig(
-                    system_instruction=self.model_prompt
+                    system_instruction=self.step_config.model_prompt
                 )
             )
         else:
@@ -235,27 +203,28 @@ class ABatchProcessor:
                 current_df = all_inputs.iloc[next_entry:last_entry]
 
             # 3. Send prompts
-            log_text = f"prompting for {self.entry_type_name} ({next_entry}:{last_entry}) out of {len(all_inputs)} at {datetime.datetime.now()}"
+            log_text = f"prompting for {self.step_config.entry_type_name} ({next_entry}:{last_entry}) out of {len(all_inputs)} at {datetime.datetime.now()}"
             self.logger.info(log_text)
             print(log_text)
 
             attempt = 0
             while attempt < self.max_attempts_per_prompt:
+                request_key= "unknown"
                 try:
-                    request_key, prep_content = self.prepare_for_request(current_df)
+                    request_key, prep_content = self.step_config.prepare_for_request(current_df)
                     if prompts_file:
                         # save prompt for tuning
                         with open(prompts_file, 'a') as f:
                             f.write(json.dumps(
                                 {
-                                    "systemInstruction" : types.ModelContent(self.model_prompt).model_dump(exclude_none=True),
+                                    "systemInstruction" : types.ModelContent(self.step_config.model_prompt).model_dump(exclude_none=True),
                                     "contents": prep_content.model_dump(exclude_none=True)
                                 }
                             )+ '\n')
                     if self.only_count_tokens:
                         print(
                             "\tprompt tokens:", 
-                            self.client.models.count_tokens(model=self.model_name, contents=prep_content).total_tokens
+                            self.client.models.count_tokens(model=self.step_config.model_name, contents=prep_content).total_tokens
                         )
                         yield None
                         break # attempt while
@@ -349,7 +318,6 @@ class ABatchProcessor:
                 self.logger.warning(f"Exception processing {batch_job.name} output: {e}")
                 print(f"Exception processing {batch_job.name} output: {e}")
         self.client.batches.delete(name=batch_job.name)
-        # exit(0)
         return success
 
     def process_job_output_content(
@@ -390,20 +358,10 @@ class ABatchProcessor:
                     )
                     ## rebatch, continue
             else:
-                if not self.save_job_output_content(display_name, content_response.parts[0].text, output_file, responses_file):
+                if not self.step_config.save_job_output_content(self.logger, display_name, content_response.parts[0].text, output_file, responses_file):
                     successful = False
         return successful
     
-    @abstractmethod
-    def save_job_output_content(self, display_name:str, response_text:str, output_file:Path, responses_file:Path|None = None) -> bool:
-        """Must be implemented by subclasses"""
-        pass
-
-    @abstractmethod
-    def prep_output_file(self, output_file:Path):
-        """Must be implemented by subclasses"""
-        pass
-
     def batch_prompt(
             self,
             input_file: Path,
@@ -439,14 +397,14 @@ class ABatchProcessor:
 
             # create output file, write header for CSV
             if not output_file.exists():
-                self.prep_output_file(output_file)
+                self.step_config.prep_output_file(output_file)
 
             all_finished_files = other_done_files + [output_file] if other_done_files else [output_file]
             inputs = self.read_input_drop_completed(input_file, all_finished_files)
 
             # 2. Initiate batch requests
-            print(f"Initiating Batch {self.entry_type_name} requests (n={self.max_batches_at_once})")
-            self.logger.info(f"Initiating Batch {self.entry_type_name} requests (n={self.max_batches_at_once})")
+            print(f"Initiating Batch {self.step_config.entry_type_name} requests (n={self.max_batches_at_once})")
+            self.logger.info(f"Initiating Batch {self.step_config.entry_type_name} requests (n={self.max_batches_at_once})")
             
             self.make_next_request_gen = self.make_next_request(inputs, prompts_file)
             jobs = self.prepare_batch_requests(self.max_batches_at_once)
@@ -464,6 +422,6 @@ class ABatchProcessor:
         # 4. While any batch jobs are pending, check if any are done
         self.wait_and_process_jobs(output_file, responses_file)
 
-        print(f"\n✓ Success! {self.entry_type_name} saved in: {output_file}")
-        self.logger.error(f"Saved {self.entry_type_name} entries in: {output_file}")
+        print(f"\n✓ Success! {self.step_config.entry_type_name} saved in: {output_file}")
+        self.logger.error(f"Saved {self.step_config.entry_type_name} entries in: {output_file}")
 

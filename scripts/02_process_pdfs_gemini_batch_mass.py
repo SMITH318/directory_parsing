@@ -1,6 +1,8 @@
 from pydantic import BaseModel
 from google.genai import errors
-from _OCRBatchProcessor import *
+import datetime
+from _OCRStep import *
+from _BatchProcessor import *
 
 import logging
 logger = logging.getLogger(__name__)
@@ -74,13 +76,16 @@ MODEL_PROMPT = (
 )
 
 def create_batch_processor():
-    return OCRBatchProcessor(
-        logger, 
+    step_config = OCRStep(
         MODEL_NAME, 
         MODEL_PROMPT, 
         "OCR line", 
         OCRLine, 
-        OCRResult, 
+        OCRResult
+    )
+    return BatchProcessor(
+        step_config,
+        logger, 
         only_count_tokens=False,#True,
         max_batches_at_once=MAX_BATCHES_AT_ONCE,
         max_entries_per_batch=1,
@@ -112,9 +117,10 @@ if __name__ == "__main__":
                 # record_prompts_responses=True
             )
         except Exception as e:
-            if isinstance(e, errors.APIError) and e.code == 429:
-                print(f"*** main loop RESOURCE_EXHAUSTED exception, pausing for {INITIAL_WAIT_SECONDS/60} at {datetime.datetime.now()}... ***")
-                logger.error(f"*** main loop RESOURCE_EXHAUSTED exception, pausing for {INITIAL_WAIT_SECONDS/60} at {datetime.datetime.now()}... ***")
+            if isinstance(e, errors.APIError) and (e.code == 429 or e.code == 503):
+                exception = "RESOURCE_EXHAUSTED" if e.code == 429 else "SERVICE UNAVAILABLE"
+                print(f"*** main loop {exception} exception, pausing for {INITIAL_WAIT_SECONDS/60} at {datetime.datetime.now()}... ***")
+                logger.error(f"*** main loop {exception} exception, pausing for {INITIAL_WAIT_SECONDS/60} at {datetime.datetime.now()}... ***")
                 time.sleep(INITIAL_WAIT_SECONDS)
             else:
                 print("*** main loop exception, pressing on ***")
@@ -125,8 +131,4 @@ if __name__ == "__main__":
                         batch_processor.client.batches.delete(name=job.name)
                     except:
                         pass
-                try:
-                    batch_processor = None
-                except:
-                    pass
-                pass
+                batch_processor = None
