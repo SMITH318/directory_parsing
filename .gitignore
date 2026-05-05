@@ -1,4 +1,8 @@
 data/*
+!data/batch_mass_dataset/
+!data/4_states_dataset/
+!data/dataset_2026.03.18/
 *.log
 *.pyc
 scripts/__pycache__/AMD_1918_util_lib.cpython-314.pyc
+desktop.ini
