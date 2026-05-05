@@ -1,3 +1,12 @@
+"""
+Step 9: Parse City Entries with Gemini
+This script processes the city entries CSV generated in Step 8 and uses the Gemini model to 
+parse detailed information from the city entries.
+It uses the Batch API to efficiently handle the parsing of a large number of entries, and 
+includes error handling to manage API rate limits and other exceptions.
+The parsed city entries are saved in a new CSV file for use in later stages of the data processing pipeline.
+"""
+
 from pydantic import BaseModel
 from google.genai import errors
 from _ExtractEntriesStep import *

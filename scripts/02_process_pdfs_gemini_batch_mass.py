@@ -1,3 +1,13 @@
+#!/usr/bin/env python3
+"""
+Step 2: OCR Processing Script
+Modified for new API and batching.
+Processes preprocessed PDF snippets using Gemini Vision API to extract text and bounding boxes.
+Enques batches of PDF snippets for OCR, rather than working one at a time, to maximize throughput and efficiency.
+Includes error handling and retry logic for API rate limits and transient errors.
+"""
+
+# TODO: Change to access files from Cloud Bucket
 from pydantic import BaseModel
 from google.genai import errors
 import datetime

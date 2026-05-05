@@ -1,3 +1,6 @@
+"""
+Converts the JSON metadata from 01_preprocess.py into a CSV format for easier analysis and integration with other tools.
+"""
 import json
 import csv
 
@@ -7,7 +10,7 @@ with open('data/01_preprocessed/all_metadata.json', 'r') as f:
 
 # Open CSV file for writing
 with open('data/01_preprocessed/all_metadata.csv', 'w', newline='') as csvfile:
-    fieldnames = ['pub_id', 'date', 'page_num', 'column', 'path', 'x_offset', 'y_offset']
+    fieldnames = ['pub_id', 'page_num', 'column', 'path', 'x_offset', 'y_offset']
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
     
     writer.writeheader()
@@ -15,7 +18,6 @@ with open('data/01_preprocessed/all_metadata.csv', 'w', newline='') as csvfile:
     # Iterate through each publication
     for pub in data:
         pub_id = pub['pub_id']
-        date = pub['date']
         
         # Iterate through each page
         for page in pub['pages']:
@@ -25,7 +27,6 @@ with open('data/01_preprocessed/all_metadata.csv', 'w', newline='') as csvfile:
             for snippet in page['snippets']:
                 writer.writerow({
                     'pub_id': pub_id,
-                    'date': date,
                     'page_num': page_num,
                     'column': snippet['column'],
                     'path': snippet['path'],

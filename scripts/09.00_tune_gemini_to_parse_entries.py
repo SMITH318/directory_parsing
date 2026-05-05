@@ -1,16 +1,17 @@
+"""
+Unsuccessful attempt to tune Gemini-2.5-flash on the extracted entries parsing task (step 9).
+Must use Vertex for training as of sping 2026.
+The tuning process didn't provide a useful result. 
+The script includes the setup for Gemini API interaction, dataset preparation, and 
+the tuning job configuration. It also includes logging for monitoring the tuning process.
+The script is retained for reference and potential future use.
+"""
 import json
-import numpy as np
 from pathlib import Path
 from google import genai
 from google.genai import types
-import pandas as pd
-from  pydantic import BaseModel
-import os
 import time
-import csv
-from collections import defaultdict
 import datetime
-from typing import Literal
 
 import logging
 logger = logging.getLogger(__name__)
@@ -41,22 +42,9 @@ client = genai.Client(vertexai=True, project=PROJECT_ID, location=REGION)#api_ke
 # setup file paths
 script_dir = Path(__file__).resolve().parent
 project_root = script_dir.parent
-# training_json = project_root / "data" / "04_extracted_entries_gemini_2pgs_seeded_986234" / "extracted_entries_training.jsonl"
-
-# 1. Load the data, group by column
-# if not training_json.exists():
-#     print(f"Error: {training_json} not found.")
-#     exit(1)
-
-        
-# # upload training file
-# file = client.files.upload(
-#     file=training_json,
-#     # config=types.UploadFileConfig(mime_type='jsonl')
-# )
 
 training_dataset = types.TuningDataset( 
-    gcs_uri= "gs://amd_training/extracted_entries_training.jsonl", # not supported in Gemini, trying Vertex
+    gcs_uri= "gs://amd_training/extracted_entries_training.jsonl", # required source for Vertex
     # examples= []  # supported in Gemini??? List[TuningExample] # tuning not supported in gemini ATM
 )
 
@@ -64,7 +52,7 @@ if training_dataset.examples is not None:
     print("loading dataset")
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent
-    data_dir = project_root / "data" / f"04_extracted_entries_gemini_2pgs_cache_gemini-3-flash-preview"
+    data_dir = project_root / "data" / f"04_extracted_entries_gemini_2pgs_cache_{model_name}"
     prompts_file = data_dir / "extracted_entries_prompts.jsonl"
     responses_file = data_dir / "extracted_entries_responses_cleaned.jsonl"
 
@@ -95,7 +83,7 @@ tuning_job = client.tunings.get(name=sft_tuning_job.name)
 while tuning_job.state.name in ["JOB_STATE_PENDING", "JOB_STATE_RUNNING"]:
     print(".", end="", flush=True)
     tuning_job = client.tunings.get(name=tuning_job.name)
-    time.sleep(60) # wait 1 minute
+    time.sleep(600) # wait 10 minutes between checks to avoid hitting rate limits, tuning can take several hours
 print(f"\nTuning job done with status {tuning_job.state.name}")
 if tuning_job.state.name != 'JOB_STATE_SUCCEEDED':
     print(tuning_job)

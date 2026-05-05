@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 """
-Reformat AMD 1918 doc entries to match Louisiana extract format.
-
-Source format: amd_1918_doc_entries.csv (OCR extracted entries with coordinates)
-Target format: louisiana extract - physician_dataset_1906_AMD.csv (processed/linked dataset)
+Step 11: Reformat AMD 1918 doc entries to match Ben's pilot format.
 """
 
 import pandas as pd
@@ -212,7 +209,6 @@ if __name__ == "__main__":
         print(f"Error: Output file already exists! Stopping: {output_file}")
         exit(1)
     output_file.parent.mkdir(parents=True, exist_ok=True)
-
     
     # Run reformatting
     reformat_amd_1918(str(input_file), str(output_file), str(city_file) if city_file.exists() else None)

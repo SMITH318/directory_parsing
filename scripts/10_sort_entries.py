@@ -1,6 +1,8 @@
 """
+Step 10: Sort CSV parsed entry files
 Script to sort CSV entry files by entry_id and save with _sorted postfix.
-Sorts both amd_1918_city_entries.csv and amd_1918_doc_entries.csv files.
+Sorts both amd_1918_city_entries.csv and amd_1918_doc_entries.csv files,
+checks for duplicate rows and entry_ids.
 """
 
 import pandas as pd

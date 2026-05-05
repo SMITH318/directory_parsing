@@ -1,3 +1,11 @@
+"""
+Step 9: Parse Doctor Entries with Gemini
+This script processes the doctor entries CSV generated in Step 8 and uses the Gemini model to 
+parse detailed information from the doctor entries.
+It uses the Batch API to efficiently handle the parsing of a large number of entries, and 
+includes error handling to manage API rate limits and other exceptions.
+The parsed doctor entries are saved in a new CSV file for use in later stages of the data processing pipeline.
+"""
 from pydantic import BaseModel
 from typing import Literal
 from google.genai import errors

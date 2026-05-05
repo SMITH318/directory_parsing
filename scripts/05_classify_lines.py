@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
-Step 3: Article Segmentation
-- Reads streaming .jsonl OCR output.
-- Groups text blocks into articles based on headlines and vertical gaps.
-- Optimized for Tesseract output and 1880s newspaper layouts.
+Step 5: Group and classify OCR lines into entries
+- Reads .jsonl OCR output with line-level text and bounding boxes.
+- Groups text blocks into entries based on content, using heuristics and optional user prompts for ambiguous cases.
+- Saves segmented entries to CSV with metadata and aggregate bounding boxes.
 """
 
 #from operator import index
 from AMD_1918_util_lib import *
 import json
-import argparse
 from pathlib import Path
 from collections import defaultdict
 #from datetime import datetime
@@ -133,16 +132,11 @@ def group_into_entries(blocks, assume_no_agg=False) -> list[dict]: # [{"linetype
     return entries
 
 def main():
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Segment OCR output into articles')
-    parser.add_argument('--input', type=str, help='Input OCR file name (default: ocr_output_tesseract.jsonl)')
-    args = parser.parse_args()
-
+    # Setup project paths
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent
 
-    # Use command line argument or default
-    input_filename = args.input if args.input else "ocr_output_auto_cleaned.jsonl"
+    input_filename = "ocr_output_auto_cleaned.jsonl"
     input_file = project_root / "data" / "02_raw_batch" / input_filename
     output_file = project_root / "data" / "03_processed_batch" / "entries_segmented.csv"
     output_file.parent.mkdir(parents=True, exist_ok=True)

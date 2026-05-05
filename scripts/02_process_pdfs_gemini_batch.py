@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-OCR Processing Script - Gemini Vision Edition
+Step 2: OCR Processing Script
 Modified for new API and batching.
 Processes preprocessed PDF snippets using Gemini Vision API to extract text and bounding boxes.
+Writes batches to file for enquing for OCR, working in smallish batches.
 """
 # TODO: Change to access files from Cloud Bucket
 
@@ -81,7 +82,7 @@ client = genai.Client(api_key=API_KEY)
 cache = client.caches.create(
     model=MODEL_NAME,
     config=types.CreateCachedContentConfig(
-        system_instruction=MODEL_PROMPT + MODEL_PROMPT
+        system_instruction=MODEL_PROMPT + MODEL_PROMPT # double model prompt to hit minimum cache size
     )
 )
 
@@ -190,12 +191,10 @@ def gemini_prepare_snippet(image_path: Path) -> dict:
                 "cachedContent": cache.name, 
             }
         }
-
     except Exception as e:
         print(f"\n    Error preparing snippet {request_key}: {e}")
         logger.error(f"Error preparing snippet {request_key}: {e}")
         raise e
-    return None
 
 def prepare_batch_requests(all_metadata: dict, df_done: pd.DataFrame, offsets_file: Path, max_to_prep: int = -1) -> list[dict]:
     """Prepare batch requests and upload images for Gemini Vision OCR processing."""
@@ -328,7 +327,7 @@ def process_batch_ocr_output_file(content_file: Path, offsets_file: Path, output
 
 def process_batch_ocr_output_content(content: str, offsets_file: Path, output_file: Path, save_max_token_responses: bool) -> tuple[bool, dict]:
     successful = True
-    offsets_file_df = pd.read_csv(offsets_file)
+    # offsets_file_df = pd.read_csv(offsets_file) # offsets haven't been valid, ignoring for now, will reimplement if we can get valid offsets from preprocessing
     needs_more_thinking = {} #{key: content}
 
     # The result file is also a JSONL file. Parse each line.
@@ -347,11 +346,12 @@ def process_batch_ocr_output_content(content: str, offsets_file: Path, output_fi
                 
                 content_response = types.GenerateContentResponse.model_validate(parsed_response["response"])
 
-                finish_reason = content_response.candidates[0].finish_reason#parsed_response["response"]["candidates"][0]["finishReason"]
+                finish_reason = content_response.candidates[0].finish_reason
                 if finish_reason != "STOP":
                     print(f"Unexpected finishReason: {finish_reason} in {parsed_response['key']}")
                     logger.warning(f"Unexpected finishReason ({content_response.model_version}): {finish_reason} in {parsed_response['key']}")
                     logger.info(json.dumps(parsed_response, indent=2))
+                     # handle if we hit max tokens, which means we likely got a partial response that can be finished with a followup prompt
                     if finish_reason == "MAX_TOKENS":
                         logger.warning(f"Total tokens used: {content_response.usage_metadata.total_token_count}")
                         info = split_key(parsed_response['key'])
@@ -531,17 +531,6 @@ if __name__ == "__main__":
             current_batch_job_file = output_dir / "current_batch_job.txt"
             current_batch_job_file.unlink(missing_ok=True) # something went very wrong so scrub any pending attempt
             pass
-
-    ##### setup for testing handling downloaded responses ####
-    # script_dir = Path(__file__).parent
-    # project_root = script_dir if (script_dir / "data").exists() else script_dir.parent
-    # output_dir = project_root / "data" / "02_raw_batch"
-
-    # offsets_file = output_dir / "snippet_offsets.csv"
-    # result_file_path = output_dir / 'batch_results.jsonl'
-    # output_file = output_dir / "ocr_output.jsonl"
-
-    # process_batch_ocr_output_file(result_file_path, offsets_file, output_file)
 
 client.caches.delete(name=cache.name)
 client.close()

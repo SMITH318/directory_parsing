@@ -1,3 +1,11 @@
+"""
+Step 8: Split Parsed Entries into City and Doctor CSVs
+This script takes the combined parsed entries CSV and splits it into two separate CSV files: 
+one for city entries and another for doctor entries, based on their entryType. 
+It also adds unique identifiers to each entry for reference in later stages of processing.
+Cities following a state entry are assigned that state name, and 
+doctor entries following a city entry are assigned that city ID.
+"""
 import pandas as pd
 from pathlib import Path
 

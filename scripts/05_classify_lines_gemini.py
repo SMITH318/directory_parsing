@@ -1,3 +1,11 @@
+"""
+Step 5: Group and classify OCR lines into entries
+- Reads .jsonl OCR output with line-level text and bounding boxes.
+- Groups text blocks into entries based on content, using heuristic Gemini API prompt.
+- Uses batching to process many columns/snippets at once, with error handling and retry logic for API rate limits and transient errors.
+- Saves segmented entries to CSV with metadata and aggregate bounding boxes.
+"""
+
 from google.genai import errors
 from typing import Literal
 from _AStepConfiguration import *
@@ -158,7 +166,6 @@ if __name__ == "__main__":
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent
 
-    # Use command line argument or default
     input_filename = "ocr_output_reviewed_batch_mass_2026.03.jsonl"
     input_file = project_root / "data" / "02_raw_batch_mass" / input_filename
     output_dir = project_root / "data" / "03_processed_batch_mass"

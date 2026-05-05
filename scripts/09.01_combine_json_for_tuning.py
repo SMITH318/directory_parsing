@@ -1,3 +1,11 @@
+"""
+Combine JSON Prompts and Responses for Tuning
+This script takes the JSONL files containing the prompts sent to the Gemini model 
+and the corresponding responses received and combines them into a single JSONL 
+file formatted for tuning a model.
+Each entry in the combined JSONL file includes the original prompt and cleaned response, 
+structured to facilitate tuning on parsing entries from medical directories (step 9).
+"""
 from pathlib import Path
 import json
 

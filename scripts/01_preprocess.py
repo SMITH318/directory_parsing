@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """
 Step 1: Preprocess PDFs (300 DPI) - Memory Efficient Version
-- Processes ONE PAGE AT A TIME to avoid OOM in Colab
-- Hardened against 'Empty Source' OpenCV errors.
-- Bypasses PIL pixel limits for large broadsheets.
-- Discards snippets < 250KB (white space filter).
+- Splits all pages in all pdfs in /pdfs into rows and columns of snippets, 
+ saving as images in /data/01_preprocessed. Expects 1 row and 3 columns per page, 
+ but selects last row on first page of a PDF.
+- Deskewing and clipping have not been successful.
+- Processes ONE PAGE AT A TIME.
+- Bypasses PIL pixel limits for large input images.
+- Discards snippets < 0.8KB.
 """
 
 import os
@@ -183,27 +186,18 @@ def process_single_page(pdf_path, page_num, dpi=300):
 
 
 def main():
-    # Detect environment
-    # try:
-    #     from google.colab import drive
-    #     IN_COLAB = True
-    #     project_root = Path("/content/jan11_exp")
-    #     print("Running in Google Colab")
-    # except ImportError:
-    IN_COLAB = False
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent
-    print("Running locally")
 
     ################### Constant/paths start here ##########################
-    pdf_dir = project_root / "pdfs" #/ "problems"
+    pdf_dir = project_root / "pdfs" 
     output_base = project_root / "data" / "01_preprocessed"
     output_base.mkdir(parents=True, exist_ok=True)
 
     SAVE_DIAGNOSTIC_IMAGES = False
     MIN_KB = 0.8
     DPI = 300
-    DESCEW_PAGES = False
+    DESCEW_PAGES = False # deskewing adds more problems than it solves, and most pages are straight enough
     CLIP_PAGES = False # clipping screws up most pages
     CLIP_PADDING = 5
     OUTER_PIXELS_TO_IGNORE = 40
@@ -218,8 +212,7 @@ def main():
 
     for pdf_idx, pdf_path in enumerate(pdf_files):
         stem = pdf_path.stem
-        match = re.match(r"(\d+)_(\d{4}-\d{2}-\d{2})", stem)
-        pub_id, pub_date = match.groups() if match else (stem, "0000-00-00")
+        pub_id = stem
 
         print(f"\n[{pdf_idx+1}/{len(pdf_files)}] Processing: {stem}")
         logger.info(f"[{pdf_idx+1}/{len(pdf_files)}] Processing PDF: {stem}")
@@ -231,7 +224,7 @@ def main():
 
         pdf_out_dir = output_base / stem
         pdf_out_dir.mkdir(parents=True, exist_ok=True)
-        pdf_entry = {"source_pdf": stem, "pub_id": pub_id, "date": pub_date, "pages": []}
+        pdf_entry = {"source_pdf": stem, "pub_id": pub_id, "pages": []}
 
         # Process ONE PAGE AT A TIME
         page_num = 1
@@ -267,7 +260,7 @@ def main():
        
             # save page for reference (optional)
             if SAVE_DIAGNOSTIC_IMAGES:
-                page_fn = f"{pub_id}_p{page_num:02d}.jpg"
+                page_fn = f"{pub_id}_p{page_num:03d}.jpg"
                 page_path = pdf_out_dir / page_fn
                 cv2.imwrite(str(page_path), img_gray, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
 
@@ -285,12 +278,10 @@ def main():
                     logger.debug(f"    Clipped page {page_num} to text area")
             
             # Detect rows
-            #h_bounds = detect_horizontal_rows(img_gray)
             h_bounds = detect_horizontal_rules(img_gray, OUTER_PIXELS_TO_IGNORE)
             # print(f"\n\tFound horizontal rules at: {h_bounds}")
             logger.debug(f"    Detected horizontal bounds at: {h_bounds}")
 
-            # TODO: consider picking rows based on page number and location
             if page_num == 1 and len(h_bounds) > EXPECTED_ROWS:
                 # Pick last row on first page
                 h_bounds = h_bounds[-2:]
@@ -317,7 +308,7 @@ def main():
                 row_strip = img_gray[y1_safe:y2_safe, :]
 
                 # save row strip for reference (optional)
-                row_fn = f"{pub_id}_p{page_num:02d}_r{r_idx:02d}.jpg"
+                row_fn = f"{pub_id}_p{page_num:03d}_r{r_idx:02d}.jpg"
                 row_path = pdf_out_dir / row_fn
                 if SAVE_DIAGNOSTIC_IMAGES:
                     cv2.imwrite(str(row_path), row_strip, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
@@ -332,7 +323,7 @@ def main():
                     x1, x2 = v_bounds[c_idx], v_bounds[c_idx+1]
                     row_snippet = row_strip[:, x1:x2]
                                             
-                    snip_fn = f"{pub_id}_p{page_num:02d}_r{r_idx:02d}_c{c_idx:03d}.jpg"
+                    snip_fn = f"{pub_id}_p{page_num:03d}_r{r_idx:02d}_c{c_idx:02d}.jpg"
                     snip_path = pdf_out_dir / snip_fn
 
                     cv2.imwrite(str(snip_path), row_snippet, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
