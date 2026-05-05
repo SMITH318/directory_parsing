@@ -1,0 +1,237 @@
+identifier,text_in_context,text_out_context
+Alabama - 1.0,"(b'61)Tenn{ }5,'88;(l88","(b'61)Tenn{.}5,'88;(l88"
+Alabama - 4.1,"'15;Intern{,}HillmanHos",'15;Intern{ }HillmanHos
+Arkansas - 3.1,"89)⊕Ark.1,{'}'12;(l12);","89)⊕Ark.1,{ }'12;(l12);"
+Arkansas - 17.0,"peland,Tho{  }s.Alexande","peland,Tho{ma}sAlexander"
+Arkansas - 17.0,"eland,Thos{.}Alexander(","and,Thomas{ }Alexander("
+California - 26.0,"al.7,'05;({1'}06);23Fair","al.7,'05;({l }06);23Fair"
+California - 30.2,8N.Raymond{.}AveVanSlyc,8N.Raymond{ }AveVanSlyc
+California - 43.0,forniaHosp{l}tal;▼Mille,forniaHosp{i}tal;▼Mille
+Colorado - 3.2,"HMOND,CLAU{DE}EVERETT(b'","HMOND,CLAU{ET}EVERETT(b'"
+Colorado - 9.0,"g.;1012,24{(l90);1344FranklinSt.;office,Metro}PACKARD,GE","g.;1012,24{                                  }PACKARD,GE"
+Colorado - 9.0,"e,Metropol{l}tanBldg.;2","e,Metropol{i}tanBldg.;2"
+Connecticut - 6.0,"kSt.;24,78{;}30;Or;▼ROO","kSt.;24,78{:}30;Or;▼ROO"
+Connecticut - 7.2,n.Med.Exam{  }ingBoard;1,n.Med.Exam{in}ingBoard;1
+Delaware - 2.1,"Del.Examin{  }gBoard,and","Del.Examin{in}gBoard,and"
+District of Columbia - 2.2,";2316,19th{;}N.WByrne,P",";2316,19th{ }N.WByrne,P"
+District of Columbia - 6.2,;910;Clin.{.}Prof.Surg.,;910;Clin.{ }Prof.Surg.
+Georgia - 3.1,ntiaryHosp{l}tal;▼Bragg,ntiaryHosp{i}tal;▼Bragg
+Georgia - 5.0,"ldg.;111,5{;306;}30;S;▼Jaco","ldg.;111,5{:306:}30;S;▼Jaco"
+Georgia - 17.1,"tewart,Tho{s. }Weir(b'87)","tewart,Tho{mas}Weir(b'87)"
+Idaho - 4.2,"Mo.10,'92;{'}retiredWas","Mo.10,'92;{ }retiredWas"
+Illinois - 7.0,genBldg.;1{;}305COLEMAN,genBldg.;1{:}305COLEMAN
+Illinois - 8.0,"dgRice,Tho{  }s.Warren(b","dgRice,Tho{ma}sWarren(b'"
+Illinois - 8.0,"gRice,Thos{.}Warren(b'7","ice,Thomas{ }Warren(b'7"
+Illinois - 10.1,"l,NovitasB{ }(SeePlymou","l,NovitasB{.}(SeePlymou"
+Illinois - 16.1,"ffice,358E{.}115thSt.;9","ffice,358E{ }115thSt.;9"
+Illinois - 22.1,"ortier,Geo{.  }Snow(b'72)","ortier,Geo{rge}Snow(b'72)"
+Illinois - 34.2,";until9;11{;}303,78;off",";until9;11{:}303,78;off"
+Illinois - 37.2,"e,25E.Wash{l}ngtonSt.;9","e,25E.Wash{i}ngtonSt.;9"
+Illinois - 43.2,"erusse,Geo{.  }Louis(b'75","erusse,Geo{rge}Louis(b'75"
+Illinois - 47.2,"32N.StateS{   }ANDAHL,ABE","32N.StateS{t.S}ANDAHL,ABE"
+Illinois - 55.0,"fice,1230E{.}.63dSt.;24","fice,1230E{ }.63dSt.;24"
+Illinois - 62.0,"{.}GARBER,CLA","{ }GARBER,CLA"
+Illinois - 62.0,"e.;1012,24{.}Johnson,Wi","e.;1012,24{ }Johnson,Wi"
+Illinois - 62.0,"EE.(b'83)⊕{.}Ill.6,'07;","EE.(b'83)⊕{ }Ill.6,'07;"
+Illinois - 62.0,"Ill.1,'95;{.}(l96);421N","Ill.1,'95;{ }(l96);421N"
+Illinois - 62.1,"ice,Millik{ }nBankBldg.","ice,Millik{i}nBankBldg."
+Illinois - 82.1,"68;(l78)Mc{I}lwain,Jame","68;(l78)Mc{i}lwain,Jame"
+Indiana - 1.0,s.P.(b'45){◊};(l97)Fall,s.P.(b'45){│};(l97)Fall
+Indiana - 1.0,m.D.(b'52){◊};(l97)HALL,m.D.(b'52){│};(l97)HALL
+Indiana - 1.0,"ston,Aaron{◊};(l97)ALAM","ston,Aaron{│};(l97)ALAM"
+Indiana - 1.0,Jos.(b'50){◊};(lt);noti,Jos.(b'50){│};(lt);noti
+Indiana - 5.0,"ale,LeviA.{◊};(l97);not","ale,LeviA.{│};(l97);not"
+Indiana - 5.0,",MathiasW.{◊};(l03)Gilb",",MathiasW.{│};(l03)Gilb"
+Indiana - 5.0,hnW.(b'48){◊};(l02)WARD,hnW.(b'48){│};(l02)WARD
+Indiana - 5.0,"urn,Jos.C.{◊};(l97)SCHU","urn,Jos.C.{│};(l97)SCHU"
+Indiana - 10.0,",'05;(l17){ }113W.DeWal",",'05;(l17){;}113W.DeWal"
+Indiana - 10.0,",'93;(l97){ }1106Calhou",",'93;(l97){;}1106Calhou"
+Indiana - 12.1,"lthe,Wm.T.{◊};(l97)GOLD","lthe,Wm.T.{│};(l97)GOLD"
+Indiana - 25.2,"wn,LemosL.{◊};(l97);not","wn,LemosL.{│};(l97);not"
+Indiana - 25.2,s.L.(b'50){◊};(l97);831,s.L.(b'50){│};(l97);831
+Iowa - 6.0,s.F.(b'48){◊};(l86)GUTC,s.F.(b'48){│};(l86)GUTC
+Iowa - 9.2,"ldg.;111,3{;305;}30;SBOOKER","ldg.;111,3{:305:}30;SBOOKER"
+Iowa - 9.2,"g.;1011,23{;}30;R;▼Burr","g.;1011,23{:}30;R;▼Burr"
+Iowa - 14.0,"'72)⊕Ia.9,{'}'97;(l97)J","'72)⊕Ia.9,{ }'97;(l97)J"
+Iowa - 14.2,"Bldg.;25,7{;308;}30WAKEMAN,","Bldg.;25,7{:308:}30WAKEMAN,"
+Iowa - 14.2,";1012,24,7{;308;}30;GWILDMA",";1012,24,7{:308:}30;GWILDMA"
+Iowa - 17.2,"ANGUN,CLAR{ }KEWILSON(b","ANGUN,CLAR{E}KEWILSON(b"
+Iowa - 24.0,"office,Enn{l}sBldg.;24,","office,Enn{i}sBldg.;24,"
+Kansas - 2.2,"OUGLASBELL{,}FREDH.(b'8",OUGLASBELL{_}FREDH.(b'8
+Kansas - 5.1,"(l01);▼She{ar}er,OliverF","(l01);▼She{  }er,OliverF"
+Kentucky - 8.1,";office,Mc{c}lureBldgRE",";office,Mc{C}lureBldgRE"
+Kentucky - 17.2,";office,We{l}ssingerGau",";office,We{i}ssingerGau"
+Louisiana - 9.1,"Asst.Prof.{Chilton,Robt.Hall(b'84)La.1,'08;(l08);904St.CharlesSt}Physiol.an",Asst.Prof.{                                                     }Physiol.an
+Louisiana - 9.1,"(F1);LD★Ch{                                                     }retien,Jos","(F1);LD★Ch{ilton,Robt.Hall(b'84)La.1,'08;(l08);904St.CharlesStCh}retien,Jos"
+Maryland - 2.0,"til9,78BAY{,}ROBT.PARKE","til9,78BAY{_}ROBT.PARKE"
+Maryland - 4.1,312N.Carro{ }ltonAve.;u,312N.Carro{l}ltonAve.;u
+Maryland - 7.1,"office,Fre{e}montandLan","office,Fre{ }montandLan"
+Maryland - 7.1,"89KNORR,ER{N}ESTA.(b'79","89KNORR,ER{ }ESTA.(b'79"
+Maryland - 8.0,andAve.;67{;}30;Prof.Hi,andAve.;67{:}30;Prof.Hi
+Maryland - 8.0,"Terrace;10{;}3012,24MAR","Terrace;10{:}3012,24MAR"
+Maryland - 10.2,"eppard,Tho{s. }S.(b'84)Md","eppard,Tho{mas}S.(b'84)Md"
+Maryland - 16.1,",24,68HOFF{,}DAVIDEDWAR",",24,68HOFF{_}DAVIDEDWAR"
+Massachusetts - 13.0,wburySt.;2{;}304;30MacL,wburySt.;2{:}304:30MacL
+Massachusetts - 13.0,"ySt.;2;304{;}30MacLeod,","ySt.;2:304{:}30MacLeod,"
+Massachusetts - 17.2,"dway,S.B.;{                            }Slattery,J","dway,S.B.;{office,520BeaconSt.;2;303;30}Slattery,J"
+Massachusetts - 17.2,"olumbusAve{office,520BeaconSt.;2;303;30}SLEEPER,FR","olumbusAve{                            }SLEEPER,FR"
+Massachusetts - 21.2,";office,12{ }CottageSt.",";office,12{9}CottageSt."
+Massachusetts - 25.0,"elen,Henry{◊}(▼);93Wash","elen,Henry{│}(▼);93Wash"
+Massachusetts - 25.0,trickHenry{◊};(l00);114,trickHenry{│};(l00);114
+Massachusetts - 25.0,",DavidJos.{◊};(l01);164",",DavidJos.{│};(l01);164"
+Massachusetts - 28.2,"UDD(b'86)⊕{◊}N.Y.1,'12;","UDD(b'86)⊕{│}N.Y.1,'12;"
+Massachusetts - 28.2,"CAR(b'67)⊕{◊}Pa.2,'96;(","CAR(b'67)⊕{│}Pa.2,'96;("
+Massachusetts - 28.2,"ETH(b'76)⊕{◊}Mass.7,'02","ETH(b'76)⊕{│}Mass.7,'02"
+Massachusetts - 28.2,"NCE(b'72)⊕{◊}Mass.1,'98","NCE(b'72)⊕{│}Mass.1,'98"
+Massachusetts - 28.2,"TER(b'78)⊕{◊}Mass.7,'09","TER(b'78)⊕{│}Mass.7,'09"
+Massachusetts - 28.2,"SON(b'84)⊕{◊}Mass.7,'11","SON(b'84)⊕{│}Mass.7,'11"
+Massachusetts - 28.2,"ITT(b'50)⊕{◊}Mass.1,'81","ITT(b'50)⊕{│}Mass.1,'81"
+Massachusetts - 28.2,"OWN(b'89)⊕{◊}Mass.7,'12","OWN(b'89)⊕{│}Mass.7,'12"
+Massachusetts - 28.2,"ERY(b'64)⊕{◊}Vt.2,'93;(","ERY(b'64)⊕{│}Vt.2,'93;("
+Massachusetts - 29.0,"e,66Parker{  }GEORGETOWN","e,66Parker{St}GEORGETOWN"
+Massachusetts - 40.1,6;(l07);41{ }StrongAve.,6;(l07);41{8}StrongAve.
+Michigan - 5.0,"ceMagill,W{m}.E.0.6,'72","ceMagill,W{M}.E.0.6,'72"
+Michigan - 12.0,"chSt.;24,6{;}308FROTHIN","chSt.;24,6{:}308FROTHIN"
+Michigan - 12.0,"Ave.W.;123{;}30,78;▼FUL","Ave.W.;123{:}30,78;▼FUL"
+Michigan - 12.0,"eyBldg.;10{;}3012,24Geh","eyBldg.;10{:}3012,24Geh"
+Michigan - 21.0,"Ave.;13,67{;}30;ObZolli","Ave.;13,67{:}30;ObZolli"
+Michigan - 21.0,"e.;89,13,6{;}308;ObDEWI","e.;89,13,6{:}308;ObDEWI"
+Michigan - 23.2,"81)Mich.1,{.}'04;(l04)M","81)Mich.1,{ }'04;(l04)M"
+Michigan - 33.0,"l04)Shaw,W{     }m.G.(b'54)","l04)Shaw,W{illia}mG.(b'54)M"
+Michigan - 33.0,"04)Shaw,Wm{.}G.(b'54)Mi","aw,William{ }G.(b'54)Mi"
+Michigan - 37.0,anC.(b'57){◊};(l01)ROSE,anC.(b'57){│};(l01)ROSE
+Michigan - 37.0,NR.(b'70)⊕{◊};(l01)ROSS,NR.(b'70)⊕{│};(l01)ROSS
+Michigan - 38.2,"IDS),,KENT{(SeeGrandRapids)}VERMEULEN,","IDS),,KENT{                }VERMEULEN,"
+Michigan - 39.2,"8)HMich.5,{*}'12;(l12);","8)HMich.5,{ }'12;(l12);"
+Minnesota - 14.0,"ffice,Phys{ }ciansandSu","ffice,Phys{i}ciansandSu"
+Minnesota - 16.2,"NVILLECLAY{,}EDW.M.(b'6",NVILLECLAY{_}EDW.M.(b'6
+Mississippi - 9.1,"ong,JohnA.{◊};(l82)McGe","ong,JohnA.{│};(l82)McGe"
+Mississippi - 9.1,esL.(b'80){◊};(l09)TURN,esL.(b'80){│};(l09)TURN
+Mississippi - 9.1,yght(b'83){◊};(l07)LENA,yght(b'83){│};(l07)LENA
+Mississippi - 9.1,"RGore,W.W.{◊};(l82)LEXI","RGore,W.W.{│};(l82)LEXI"
+Mississippi - 9.1,"arter,L.E.{◊};(l82);R.D","arter,L.E.{│};(l82);R.D"
+Mississippi - 16.1,"y,GeorgeW.{◊};(l82);R.D","y,GeorgeW.{│};(l82);R.D"
+Mississippi - 16.1,stin(b'50){◊};(l90)Tayl,stin(b'50){│};(l90)Tayl
+Mississippi - 16.1,eroy(b'78){◊};(l06);R.D,eroy(b'78){│};(l06);R.D
+Mississippi - 16.1,Thos.Henry{◊};(l01)WATE,Thos.Henry{│};(l01)WATE
+Mississippi - 16.1,O.W.(b'70){◊};(l04)WEST,O.W.(b'70){│};(l04)WEST
+Mississippi - 16.1,"R.S.(b'53){◊};(l82)Pou,","R.S.(b'53){│};(l82)Pou,"
+Mississippi - 16.1,"rancis,Sr.{◊};(l82)RUSH","rancis,Sr.{│};(l82)RUSH"
+Mississippi - 16.1,ston(b'86){◊};(l09)LITT,ston(b'86){│};(l09)LITT
+Missouri - 27.2,"on,JesseE.{◊};(l83)PARA","on,JesseE.{│};(l83)PARA"
+Missouri - 27.2,"ly,Thos.K.{◊};(♁)PATTON","ly,Thos.K.{│};(♁)PATTON"
+Missouri - 37.1,",'77;3418H{a}llidayAveE",",'77;3418H{o}llidayAveE"
+Missouri - 41.2,"Bldg.;12,3{;}305;▼LIPPM","Bldg.;12,3{:}305;▼LIPPM"
+Missouri - 41.2,anBldg.;45{;}30;Asst.Pr,anBldg.;45{:}30;Asst.Pr
+Missouri - 44.0,"Bldg.;24,6{;}308Pack,Se","Bldg.;24,6{:}308Pack,Se"
+Missouri - 44.0,"Bldg.;1012{;30,45;}30;(B27);O","Bldg.;1012{:30,45:}30;(B27);O"
+Missouri - 44.0,";810,13,67{;}30Pawelek,",";810,13,67{:}30Pawelek,"
+Missouri - 46.2,"r★Steger,W{     }m.T.Mo.1,'","r★Steger,W{illia}mT.Mo.1,'9"
+Missouri - 46.2,"★Steger,Wm{.}T.Mo.1,'91","er,William{ }T.Mo.1,'91"
+Montana - 3.1,"b'88)⊕Ill.{8},'12;(l13)","b'88)⊕Ill.{1},'12;(l13)"
+Nebraska - 2.2,{B}ENSONSTATI,{ }ERROR:__ma
+Nebraska - 2.2,"BE{NS}ONSTATION,",E{RR}OR:__main_
+Nebraska - 2.2,"BENSO{NSTATION,3,170,DOUGLASCLA}RK,FREEDAM",ERRO{                         }R:__main__
+Nebraska - 2.2,"OUGLASCLAR{K,FREEDAMAYPILES(SeeO}maha)LOECH",ERROR{:__                  }main__:ent
+Nebraska - 2.2,"LES(SeeOma{ha)LOECHNER,WM.HENRY(b'75)⊕ }Neb.5,'01;",ERROR:__ma{in__:entry text dropped for }Nebraska -
+Nebraska - 2.2,"(b'75)⊕Neb{.5,'01;(l01)Parsons,JohnWesley(b'67)Ia.1,'91;(l91)BERLIN,196,OTOESchall,DavidHo}race(b'75)",ed for Neb{                                                                               }raska - 10
+Nebraska - 2.2,",DavidHora{ce(b'75)P}a.2,'01;(l", for Nebra{sk       }a - 10.2 (
+Nebraska - 2.2,"ce(b'75)Pa{     }.2,'01;(l0",r Nebraska{ - 10}.2 (length
+Nebraska - 2.2,"(b'75)Pa.2{,'01;}(l01)BERTR",ska - 10.2{     }(length in
+Nebraska - 2.2,"Pa.2,'01;({l01)BERTRAND,643,PHELPSRIDER,EUGENEE.(b'81)⊕Mo.20,'03;(l03)SHRECK,WM.A.(b'64)⊕Ky.2,'96;(l96)BETHANY,948,LANCASTERBeattie,JasperMo.28,'94;(l02)Jester,Chas.W.(b'65)ENeb.4,'04;(l04)McIntyre,Wm.EIa.6,'87;(l91)Roberts,DouglasH.Neb.4,'96;(l96);Prof.Prac.Med.andTher.,Neb.4Wilmot,FrankA.(b'87)Neb.4,'13;(l14);▼BIGSPRING,325,DEUELAl}len,Archib",a - 10.2 ({                                                                                                                                                                                                                                                                                                                                    }length in 
+Nebraska - 2.2,"DEUELAllen{,ArchibaldR.(b'51)Ia.1,'88;()Smi}th,Clinton", 10.2 (len{g                               }th in 2661
+Nebraska - 2.2,"88;()Smith{,Cl}intonH.(b'",.2 (length{   }in 2661 vs
+Nebraska - 2.2,"Smith,Clin{tonH.(b'83)Neb.4,'}16;(l16)BI",(length in{ 266              }1 vs. out 
+Nebraska - 2.2,"3)Neb.4,'1{6;(l16)BINGHAM,15,SHERIDANEmerson,ArthurG.Neb.5,'01;(l01)BLADEN,494,WEBSTERKehler,Cha}s.F.(b'54)",th in 2661{ v                                                                                   }s. out 266
+Nebraska - 2.2,"hler,Chas.{F.(b'54)Ia.1,'8}2;(l91)WEG",n 2661 vs.{ out           }2661):
+Nebraska - 2.2,"4)Ia.1,'82{;(l91)WEGMAN,WM.M.(b'73)Mo.31,'01;(l01)BLAIR,2,584,WASHINGTONBURSTIEN,LOUISLANCE(b'8}6)⊕Ia.6,'0", vs. out 2{                                                                                    }661):
+Nebraska - 2.2,"LANCE(b'86{)⊕Ia.6,'08;(l12);U;▼Fees,ArthurWaldo(b'}61)Ia.4,'8",vs. out 26{                                       }61):
+Nebraska - 2.2,"aldo(b'61){Ia.4,'87;(l00)HINCHMAN,JOS.V.(b'46)Ind.8,'85;(l'91KILIAN,LEOJULIUS(b'89)⊕Mo.2,'13;(l17);MemberMo.StateMed.Assn.;Pd*;▼▼LANGSTAFF,GEO.AUGUSTUS(b'54)⊕Ont.1,'77;(l97)MURDOCH,RUSSELLJ.(b'70)⊕Neb.5,'98;(l98)NIELSEN,MORRIS(b'75)⊕Neb.5,'00;(l00)Palmer,Wm.H.(b'39)Ill.1,'70;(l91)STEWART,EDWARDR.(b'62)Mo.1,'87;(l91)BLOOMFIELD,1,264,KNOXBARTLING,DIETRICHLUDWIG(b'87)Ill.22,'17;(l17);Mem.Ill.StateMed.Soc.KALAR,SARAHBLAINEIa.10,'03;(l03)METTLEN,JAMESHARVEY(b'69)⊕Ia.3,'97;(l97);▼PETERS,GLENE.(b'84)Neb.6,'11;(l11)BLOOMINGTON,554,FRANKLINMALICK,URIAHH.(b'45)Ia.1,'78;(l91)SPARKS,MARTINL.(b'61)Ky.4,'05;(l12)SUMNER,ELLAP.(b'46)⊕Neb.5,'95;(l95)BLUEHILL,761,WEBSTERBartholomew,PhilipHenry(b'79)Ill.11,'02;(l08);▼LAIRD,CLAUDEROSS(b'81)⊕Neb.6,'13;(l13);▼Uridil,JosephE.(b'91)Neb.6,'13;(l14)WEGMANN,CASPER◊;(l91)BLUESPRINGS,712,GAGESCHOOLING,H.GUY(b'72)Neb.4,'01;(l08);OpASloss,Altha(b'60)Ia.1,'98;(l98)BOELUS,183,HOWARDDODD,EDWARD(b'78)Ia.10,'03;(l03)BOSTWICK,100,NUCKOLLSPinkerton,Wm.James(b'70)Neb.5,'98;(l98);▼BRADEN,8,ARTHURPhillips,AlfordB.HO.7,'83;(l04)BRADSHAW,359,YORKMORRISON,GEO.A.(b'78)⊕Neb.5,'05;(l05)BRADY,308,LINCOLNVANDIVER,C.E.Mo.22,'87;(l91)BRAINARD,465,BUTLERCapek,ErnestJos.(b'70)Aus.7,'95;(l02)MARRON,JAMESG.⊕N.Y.10,'87;(l92)}", out 2661){:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           }
+New Jersey - 24.1,"t,Chas.Bor{r}omeoHPa.9,","t,Chas.Bor{ }omeoHPa.9,"
+New York - 8.2,"andAve.;89{;}30,12;Emer","andAve.;89{:}30,12;Emer"
+New York - 8.2,"JohnsPl.;3{;}307BAUER,J","JohnsPl.;3{:}307BAUER,J"
+New York - 23.1,"G1);R★SEAR{LE},MARCUSFOW","G1);R★SEAR{CH},MARCUSFOW"
+New York - 23.2,"er,HaroldW{m  }.(b'90)Mic","er,HaroldW{ood}.(b'90)Mic"
+New York - 44.2,"N.Y.3,'96;{.}(l96)LaMor","N.Y.3,'96;{ }(l96)LaMor"
+New York - 49.0,"TOR(b'77)⊕{.}Md.1,'03;(","TOR(b'77)⊕{ }Md.1,'03;("
+New York - 54.1,";12,67;30;{▼}NMcClendon",";12,67;30;{┠}NMcClendon"
+New York - 54.1,"Ave.;13;S;{▼}NO'BRIEN,J","Ave.;13;S;{┠}NO'BRIEN,J"
+New York - 54.1,"C3,12);S★;{▼}Poole,Geo.","C3,12);S★;{┠}Poole,Geo."
+New York - 54.1,";30,12,78;{▼}REARDON,JO",";30,12,78;{┠}REARDON,JO"
+New York - 54.1,";89,13,78;{▼}Roberts,Da",";89,13,78;{┠}Roberts,Da"
+New York - 54.1,"ve.;13,78;{▼}STELLA,GIO","ve.;13,78;{┠}STELLA,GIO"
+New York - 54.1,"ANNI(b'84){▼}N.Y.1,'06;","ANNI(b'84){┠}N.Y.1,'06;"
+New York - 54.1,"after2;Pd;{▼}WALLACH,WM","after2;Pd;{┠}WALLACH,WM"
+New York - 54.1,"28,F8);S★;{▼}ABBOTT,THE","28,F8);S★;{┠}ABBOTT,THE"
+New York - 54.1,"d.,N.Y.19;{▼}Abel,Saml.","d.,N.Y.19;{┠}Abel,Saml."
+New York - 83.1,"alzo,VitoV{.}Ita.10,'12","alzo,VitoV{ }Ita.10,'12"
+New York - 87.2,"⊕Tenn.11,'{'}95,S.C.1,'","⊕Tenn.11,'{ }95,S.C.1,'"
+New York - 89.0,"(b'82)N.Y.{9},'16;(l16)","(b'82)N.Y.{8},'16;(l16)"
+New York - 95.1,"WE,JOHNT.W{.}N.Y.10,'85","WE,JOHNT.W{ }N.Y.10,'85"
+New York - 104.2,"vice,Ellis{,}Island","vice,Ellis{ }Island"
+New York - 121.2,",'07;notin{'}practice;M",",'07;notin{ }practice;M"
+New York - 125.2,"rg.,N.Y.15{,};(A28);S★P","rg.,N.Y.15{ };(A28);S★P"
+New York - 127.0,"ynes,Jos.E{.}N.Y.3,'86;","ynes,Jos.E{ }N.Y.3,'86;"
+North Carolina - 2.0,"office,Med{l}calBldg.;1","office,Med{i}calBldg.;1"
+North Carolina - 3.2,"NG),62,HAR{T}NETTSpence","NG),62,HAR{ }NETTSpence"
+North Carolina - 11.1,"b'61)La.1,{'}'82;(l85)G","b'61)La.1,{ }'82;(l85)G"
+Ohio - 5.2,"9,NOBLEDEW{,}FRANKRAYMO","9,NOBLEDEW{_}FRANKRAYMO"
+Ohio - 24.0,ctice;Illu{n}inatingBld,ctice;Illu{m}inatingBld
+Ohio - 26.2,"91)0.12,'1{3};(l13);893","91)0.12,'1{2};(l13);893"
+Ohio - 34.2,"Hays,James{◊};(l96);15E","Hays,James{│};(l96);15E"
+Ohio - 57.2,'86;(l96);{.}656W.Mulbe,'86;(l96);{ }656W.Mulbe
+Oklahoma - 16.1,"LRTHOMAS,E{RNEST}(b'83)Ark.","LRTHOMAS,E{rnest}(b'83)Ark."
+Oklahoma - 16.2,"87)Okla.1,{'}'12;(l12);","87)Okla.1,{ }'12;(l12);"
+Oregon - 2.0,"⊕Mo.7,'08;{     }Joseph,Emi","⊕Mo.7,'08;{(l09)}Joseph,Emi"
+Oregon - 2.0,"14;(l14);▼{(l09)}Robertson,","14;(l14);▼{     }Robertson,"
+Pennsylvania - 68.2,St.JamesSt{.};ARMSTRONG,St.JamesSt{ };ARMSTRONG
+Pennsylvania - 70.0,sArcade;14{;}30;S★Canad,sArcade;14{:}30;S★Canad
+Pennsylvania - 70.0,"ldg.;24,78{;}30CARROLL,","ldg.;24,78{:}30CARROLL,"
+Pennsylvania - 70.0,"rsonSt.;12{;30,68;}30Chatham,","rsonSt.;12{:30,68:}30Chatham,"
+Pennsylvania - 70.0,"eAve.;12,6{;}308;▼CHEES","eAve.;12,6{:}308;▼CHEES"
+Pennsylvania - 70.0,nanBldg.;1{;305;}30;GCherry,nanBldg.;1{:305:}30;GCherry
+Pennsylvania - 72.2,"t.;89,12,6{;307;}30Hofmann,","t.;89,12,6{:307:}30Hofmann,"
+Pennsylvania - 74.2,"Bldg.;23Mc{C}reery,Albe","Bldg.;23Mc{c}reery,Albe"
+Pennsylvania - 89.2,"l09)Wood,W{     }m.Howard(b","l09)Wood,W{illia}mHoward(b'"
+Pennsylvania - 89.2,"09)Wood,Wm{.}Howard(b'8","od,William{ }Howard(b'8"
+Pennsylvania - 95.0,"ce,97Hills{s}ideSt.;810","ce,97Hills{ }ideSt.;810"
+Porto Rico - 2.2,15;(l15);5{5}VillaSt.;▼,15;(l15);5{ }VillaSt.;▼
+South Dakota - 6.2,"8)⊕Minn.4,{'}'02;(l02);","8)⊕Minn.4,{ }'02;(l02);"
+Tennessee - 3.1,",'89;(l89){.}Sledge,Joh",",'89;(l89){ }Sledge,Joh"
+Tennessee - 3.1,",'05;(l04){.}BYRNE(R.D.",",'05;(l04){ }BYRNE(R.D."
+Tennessee - 7.1,"NVILLE),,W{ar}RENFisher,","NVILLE),,W{AR}RENFisher,"
+Tennessee - 8.2,")Sharp,Tho{  }s.Hilliard",")Sharp,Tho{ma}sHilliard("
+Tennessee - 8.2,"Sharp,Thos{.}Hilliard(b","arp,Thomas{ }Hilliard(b"
+Tennessee - 12.2,"teinBldgMc{C}reary,Wm.L","teinBldgMc{c}reary,Wm.L"
+Tennessee - 13.2,"enn.5,'01;{     }Taylor,Jam","enn.5,'01;{(l00)}Taylor,Jam"
+Tennessee - 13.2,"0,'02;(l02{)(l00})LEIPERSFO","0,'02;(l02{     })LEIPERSFO"
+Tennessee - 13.2,"ol.)(b'82){                }EBLEN,JAME","ol.)(b'82){Tenn.7,'12;(l12)}EBLEN,JAME"
+Tennessee - 13.2,"Ga.10,'98;{Tenn.7,'12;(l12)}(l98)TILLE","Ga.10,'98;{                }(l98)TILLE"
+Tennessee - 13.2,"ETTE(b'74){                   }Foute,Wm.T","ETTE(b'74){Tenn.5,'94;(l96);Ob}Foute,Wm.T"
+Tennessee - 13.2,",'82;(l89){Tenn.5,'94;(l96);Ob}Hall,GidMa",",'82;(l89){                   }Hall,GidMa"
+Tennessee - 13.2,"enn.9,'06;{       }YOUNG,CLAU","enn.9,'06;{(l06);▼}YOUNG,CLAU"
+Tennessee - 13.2,"enn.5,'93;{(l06);▼}(l94);NHIC","enn.5,'93;{       }(l94);NHIC"
+Tennessee - 22.2,Blvd.;1112{;}30;(C3);U★,Blvd.;1112{:}30;(C3);U★
+Tennessee - 23.0,"rneSt.;111{;30,57;}30;▼WALTON","rneSt.;111{:30,57:}30;▼WALTON"
+Texas - 13.1,l09);17291{st}AveSpradli,l09);17291{/2}AveSpradli
+Texas - 16.0,"fice,Mills{'Bldg.;1112,35}","fice,Mills{Bldg.;1112,35 }"
+Texas - 43.2,"25;OALR★Mc{K}inney,Jess","25;OALR★Mc{k}inney,Jess"
+Virginia - 8.1,"MOSES,J.H.{◊};(♁)IRVING","MOSES,J.H.{│};(♁)IRVING"
+Virginia - 9.2,",24,810HAM{N}ER,GEO.PIN",",24,810HAM{M}ER,GEO.PIN"
+Virginia - 13.1,"office,256{.}GranbySt.;","office,256{ }GranbySt.;"
+Virginia - 14.1,"gHospitalM{c}GILL,ELISH","gHospitalM{ }GILL,ELISH"
+Virginia - 21.0,"Brooke,Tho{  }s.V.(b'48)","Brooke,Tho{ma}sV.(b'48)V"
+Virginia - 21.0,"rooke,Thos{.}V.(b'48)Va","oke,Thomas{ }V.(b'48)Va"
+Washington - 10.2,")Ia.1,'87;{.}(l88);815,",")Ia.1,'87;{ }(l88);815,"
+West Virginia - 9.2,".;810,13,6{;308;}30;▼MARYTO",".;810,13,6{:308:}30;▼MARYTO"
+Wisconsin - 6.2,"ffice,Sher{l}danBldg.;9","ffice,Sher{i}danBldg.;9"
+Wisconsin - 14.2,"s.6;(F6)Mc{G}rath,James","s.6;(F6)Mc{g}rath,James"
+Wisconsin - 20.0,"eAve.;89,2{;303;}30,78Hemmi","eAve.;89,2{:303:}30,78Hemmi"
+Wisconsin - 20.0,"MainSt.;12{;303;}30,68MEACH","MainSt.;12{:303:}30,68MEACH"
+Wisconsin - 23.2,"ll.6,'92;({♁})Williams,","ll.6,'92;({⚁})Williams,"
+Wisconsin - 23.2,"EO.2,'87;({♁})SHAW,BYRO","EO.2,'87;({⚁})SHAW,BYRO"
+Wisconsin - 23.2,"ot.5,'83;({♁})PELTON,LE","ot.5,'83;({⚁})PELTON,LE"
+Wisconsin - 23.2,"ll.4,'80;({♁})WOOD,FRED","ll.4,'80;({⚁})WOOD,FRED"
+Wisconsin - 23.2,"HO.7,'74;({♁})Larrabee,","HO.7,'74;({⚁})Larrabee,"
+Wisconsin - 23.2,"ll.1,'96;({♁});210McInd","ll.1,'96;({⚁});210McInd"
+Wisconsin - 23.2,"l.11,'88;({♁});612Grant","l.11,'88;({⚁});612Grant"
