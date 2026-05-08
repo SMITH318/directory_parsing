@@ -3,7 +3,7 @@ Post-line grouping and classification (step 5) sanity checker
 Checks for consistency between raw OCR text lines and grouped and classified entries via:
   - Entries exist for all pages, rows, and columns
   - All text has been preserved in order
-  - Bounding boxes match grouped lines
+  - Bounding boxes match grouped lines - NOT IMPLEMENTED
   - Each document has only one, starting state
   - The relative proportion of doc to city entries matches across publications
   - There are only a few, correct UNKNOWNs.

@@ -27,18 +27,15 @@ class OCRStep(AStepConfiguration):
         if not Path(request_df['path']).exists():
             # self.logger.error(f"Image file missing: {request_df['path']}")
             raise FileNotFoundError
-        # upload image
-        # file = self.client.files.upload(file=request_df['path'])
-        # content = types.UserContent([
-        #     types.Part.from_uri(file_uri=file.uri, mime_type=file.mime_type)
-        # ])
-        # inline the file <- new, to try
+
+        # inline the file
         with open(request_df['path'], 'rb') as f:
             image_bytes = f.read()
         content = types.UserContent([
             types.Part.from_bytes(
                 data=image_bytes,
                 mime_type='image/jpeg',
+                #media_resolution=types.MediaResolution.MEDIA_RESOLUTION_HIGH, # add? or MEDIA_RESOLUTION_ULTRA_HIGH??
             )
         ])
         return f"gemini_ocr_{os.path.basename(request_df['path'])}", content
