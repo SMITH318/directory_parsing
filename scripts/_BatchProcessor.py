@@ -81,6 +81,7 @@ class BatchProcessor:
             return data_in
         # print(finished_df.columns)
         cols_to_check = self.step_config.df_columns_to_check_finished()
+        # print(cols_to_check)
         keys_lambda = lambda row: '-'.join(row.values.astype(str))
         finished_keys = finished_df[
             [col_tup[1] for col_tup in cols_to_check]
@@ -176,10 +177,7 @@ class BatchProcessor:
             self.logger.info(f"All inputs processed: {e}")
 
         gc.collect()
-        if len(jobs) == 0:
-            print(f"No jobs prepared, all finished(?). Exiting.")
-            self.logger.error(f"No jobs prepared, all finished(?). Exiting.")
-            exit(0)
+        
         print(f"Total jobs prepared: {len(jobs)}")
         self.logger.info(f"Total jobs prepared: {len(jobs)}")
         
@@ -369,7 +367,7 @@ class BatchProcessor:
             output_file_name: str,
             other_done_files: list[Path]|None = None,
             record_prompts_responses: bool = False
-        ):
+        ) -> bool: # returns whether all inputs processed
 
         # 1. Setup file paths
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -401,6 +399,10 @@ class BatchProcessor:
 
             all_finished_files = other_done_files + [output_file] if other_done_files else [output_file]
             inputs = self.read_input_drop_completed(input_file, all_finished_files)
+            if len(inputs) == 0:
+                print(f"No inputs left to process.")
+                self.logger.error(f"No inputs left to process.")
+                return True
 
             # 2. Initiate batch requests
             print(f"Initiating Batch {self.step_config.entry_type_name} requests (n={self.max_batches_at_once})")
@@ -424,4 +426,5 @@ class BatchProcessor:
 
         print(f"\n✓ Success! {self.step_config.entry_type_name} saved in: {output_file}")
         self.logger.error(f"Saved {self.step_config.entry_type_name} entries in: {output_file}")
+        return False # something could have been missed 
 

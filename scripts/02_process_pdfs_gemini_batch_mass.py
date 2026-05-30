@@ -119,13 +119,14 @@ if __name__ == "__main__":
             print("*** Iteration", i, "***")
             if not batch_processor:
                 batch_processor = create_batch_processor()
-            batch_processor.batch_prompt(
+            if batch_processor.batch_prompt(
                 metadata_path, 
                 output_dir, 
                 "ocr_output_retest.jsonl",
                 # [done_file], 
                 # record_prompts_responses=True
-            )
+            ):
+                break
         except Exception as e:
             if isinstance(e, errors.APIError) and (e.code == 429 or e.code == 503):
                 exception = "RESOURCE_EXHAUSTED" if e.code == 429 else "SERVICE UNAVAILABLE"
