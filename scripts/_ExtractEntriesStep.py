@@ -42,10 +42,11 @@ class ExtractEntriesStep(AStepConfiguration):
     # abstract
     def save_job_output_content(self, logger: logging.Logger, display_name:str, response_text:str, output_file:Path, responses_file:Path|None = None) -> bool:
         entries = json.loads(response_text)
+        logger.debug(f"loaded json ({type(entries)}): {entries}")
         if responses_file:
             with open(responses_file, 'a') as f:
                 f.write(json.dumps(entries) + '\n')
-        # entries = json_entries[f"{entry_type_name}_entries"]
+        entries = entries[f"{self.entry_type_name}_entries"]
 
         logger.info(f"received {len(entries)} {self.entry_type_name} entries at {datetime.datetime.now()}")
         print(f"\treceived {len(entries)} {self.entry_type_name} entries at {datetime.datetime.now()}")

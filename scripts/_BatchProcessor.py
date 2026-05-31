@@ -82,7 +82,11 @@ class BatchProcessor:
         # print(finished_df.columns)
         cols_to_check = self.step_config.df_columns_to_check_finished()
         # print(cols_to_check)
-        keys_lambda = lambda row: '-'.join(row.values.astype(str))
+        keys_lambda = (
+            (lambda row: '-'.join(row.values.astype(str))) 
+            if len(cols_to_check) > 1 
+            else (lambda row: str(row.iloc[0]))
+        )
         finished_keys = finished_df[
             [col_tup[1] for col_tup in cols_to_check]
         ].apply(keys_lambda, axis=1).drop_duplicates()
@@ -210,6 +214,8 @@ class BatchProcessor:
                 request_key= "unknown"
                 try:
                     request_key, prep_content = self.step_config.prepare_for_request(current_df)
+                    self.logger.debug(f"Content for {request_key} request:")
+                    self.logger.debug(prep_content)
                     if prompts_file:
                         # save prompt for tuning
                         with open(prompts_file, 'a') as f:
@@ -356,7 +362,9 @@ class BatchProcessor:
                     )
                     ## rebatch, continue
             else:
-                if not self.step_config.save_job_output_content(self.logger, display_name, content_response.parts[0].text, output_file, responses_file):
+                content_text = content_response.parts[0].text
+                self.logger.debug(f"content_response.parts[0].text ({type(content_text)}): {content_text}")
+                if not self.step_config.save_job_output_content(self.logger, display_name, content_text, output_file, responses_file):
                     successful = False
         return successful
     

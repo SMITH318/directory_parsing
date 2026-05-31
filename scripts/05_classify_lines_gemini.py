@@ -66,6 +66,13 @@ class ClassifyLinesStep(AStepConfiguration):
     def drop_some_finished(self, finished_df: pd.DataFrame) -> pd.DataFrame:
         return finished_df
 
+    def _group_df_by_column(self, df: pd.DataFrame) -> pd.DataFrame:
+        # create a new data frame where each row is a data frame of lines from the same page (grouped by pub, page, col)
+        # first create a list of dicts, each with name: key and group: DataFrame
+        cols = ['pub', 'page', 'col']
+        dfs = [{"name": name, "group": group} for name, group in df.groupby(cols)]
+        return pd.DataFrame(dfs)
+    
     # abstract
     def load_input(self, file_in: Path) -> pd.DataFrame:
         # Read JSONL file and load it into a list of dictionaries
@@ -91,21 +98,18 @@ class ClassifyLinesStep(AStepConfiguration):
         # Turn list of dictionaries into DataFrame
         df = pd.DataFrame(line_dicts)
 
-        # create a new data frame where each row is a data frame of lines from the same page (grouped by pub, page, col)
-        # first create a list of dicts, each with name: key and group: DataFrame
-        dfs = [{"name": name, "group": group} for name, group in df.groupby(['pub', 'page', 'col'])]
-        return pd.DataFrame(dfs)
+        return self._group_df_by_column(df)
 
     # abstract
     def load_finished(self, file_done: Path) -> pd.DataFrame:
-        return pd.DataFrame()
+        df = pd.read_csv(file_done, encoding='utf-8')
+        df = df.rename(columns={'publication':'pub', 'page_number':'page', 'column':'col'})
+        dfs = self._group_df_by_column(df)
+        return dfs
     
     # abstract
     def df_columns_to_check_finished(self) -> list[tuple[str,str]]:
-        raise NotImplementedError(""""
-            ClassifyLinesBatchProcessor does not check finished entries by key columns, 
-            since it is designed to be run after all lines have been extracted and saved to a single output file.
-        """)
+        return [('name', 'name')] 
 
     # abstract
     def prepare_for_request(self, request_df: pd.DataFrame) -> tuple[str, types.UserContent]: # request key, content

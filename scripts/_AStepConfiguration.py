@@ -12,7 +12,7 @@ from google.genai import types
 # import time
 import pandas as pd
 from pydantic import BaseModel
-# import csv
+import csv
 import logging
 from _clean_gemini import *
 
@@ -48,7 +48,7 @@ class AStepConfiguration(ABC):
         pass
     
     @abstractmethod
-    def df_columns_to_check_finished(self) -> list[str]:
+    def df_columns_to_check_finished(self) -> list[tuple[str,str]]:
         """Must be implemented by subclasses"""
         pass
 
