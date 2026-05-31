@@ -192,23 +192,34 @@ def reformat_amd_1918(input_csv, output_csv, city_csv=None):
     print(f"Output file: {output_csv}")
 
 
-if __name__ == "__main__":
+def main(dataset: str):
     # Define paths
-    project_root = Path(__file__).parent
-    project_root = project_root if (project_root / "data").exists() else project_root.parent
-    DATA_SET = "2026.03.18"
-    input_file = project_root / "data" / f"04_extracted_entries_gemini_{DATA_SET}" / "amd_1918_doc_entries_sorted_deduped.csv"
-    city_file = project_root / "data" / f"04_extracted_entries_gemini_{DATA_SET}" / "amd_1918_city_entries_sorted_deduped.csv"
-    output_file = project_root / "data" / f"05_reformatted_entries_{DATA_SET}" / "amd_1918_reformatted.csv"
+    script_dir = Path(__file__).resolve().parent
+    project_root = script_dir.parent
+    data_dir = project_root / "data" / dataset
+    
+    input_file = data_dir / "10_doc_entries_sorted.csv"
+    city_file = data_dir / "10_city_entries_sorted.csv"
+    output_file = data_dir / "11_reformatted.csv"
     
     # Check if input file exists
     if not input_file.exists():
         print(f"Error: Input file not found: {input_file}")
-        exit(1)
+        sys.exit(1)
     if output_file.exists():
         print(f"Error: Output file already exists! Stopping: {output_file}")
-        exit(1)
+        sys.exit(1)
     output_file.parent.mkdir(parents=True, exist_ok=True)
     
     # Run reformatting
     reformat_amd_1918(str(input_file), str(output_file), str(city_file) if city_file.exists() else None)
+
+if __name__ == "__main__":
+    import argparse
+    import sys
+    parser = argparse.ArgumentParser(description="Step 11: Reformat AMD 1918 doc entries")
+    parser.add_argument("dataset", help="Name of the dataset")
+    args = parser.parse_args()
+    
+    main(args.dataset)
+

@@ -3,35 +3,53 @@ Converts the JSON metadata from 01_preprocess.py into a CSV format for easier an
 """
 import json
 import csv
+from pathlib import Path
+import argparse
 
-# Load the JSON file
-with open('data/01_preprocessed/all_metadata.json', 'r') as f:
-    data = json.load(f)
+def main(dataset: str, preprocessed_dir: str = None):
+    script_dir = Path(__file__).resolve().parent
+    project_root = script_dir.parent
+    
+    preprocessed_dir_path = Path(preprocessed_dir) if preprocessed_dir else project_root / "data" / dataset / "01_preprocessed"
+    json_path = preprocessed_dir_path / 'all_metadata.json'
+    csv_path = preprocessed_dir_path / 'all_metadata.csv'
 
-# Open CSV file for writing
-with open('data/01_preprocessed/all_metadata.csv', 'w', newline='') as csvfile:
-    fieldnames = ['pub_id', 'page_num', 'column', 'path', 'x_offset', 'y_offset']
-    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-    
-    writer.writeheader()
-    
-    # Iterate through each publication
-    for pub in data:
-        pub_id = pub['pub_id']
+    # Load the JSON file
+    with open(json_path, 'r') as f:
+        data = json.load(f)
+
+    # Open CSV file for writing
+    with open(csv_path, 'w', newline='') as csvfile:
+        fieldnames = ['pub_id', 'page_num', 'column', 'path', 'x_offset', 'y_offset']
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         
-        # Iterate through each page
-        for page in pub['pages']:
-            page_num = page['page_num']
+        writer.writeheader()
+        
+        # Iterate through each publication
+        for pub in data:
+            pub_id = pub['pub_id']
             
-            # Iterate through each snippet (column)
-            for snippet in page['snippets']:
-                writer.writerow({
-                    'pub_id': pub_id,
-                    'page_num': page_num,
-                    'column': snippet['column'],
-                    'path': snippet['path'],
-                    'x_offset': snippet['x_offset'],
-                    'y_offset': snippet['y_offset']
-                })
+            # Iterate through each page
+            for page in pub['pages']:
+                page_num = page['page_num']
+                
+                # Iterate through each snippet (column)
+                for snippet in page['snippets']:
+                    writer.writerow({
+                        'pub_id': pub_id,
+                        'page_num': page_num,
+                        'column': snippet['column'],
+                        'path': snippet['path'],
+                        'x_offset': snippet['x_offset'],
+                        'y_offset': snippet['y_offset']
+                    })
 
-print("CSV file created successfully at data/01_preprocessed/all_metadata.csv")
+    print(f"CSV file created successfully at {csv_path}")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Convert metadata JSON to CSV")
+    parser.add_argument("dataset", help="Name of the dataset")
+    parser.add_argument("--preprocessed", help="Directory for preprocessed images", default=None)
+    args = parser.parse_args()
+    
+    main(args.dataset, args.preprocessed)

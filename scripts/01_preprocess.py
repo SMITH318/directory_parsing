@@ -185,13 +185,13 @@ def process_single_page(pdf_path, page_num, dpi=300):
     return None
 
 
-def main():
+def main(dataset: str, pdf_dir: str = None, preprocessed_dir: str = None):
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent
 
     ################### Constant/paths start here ##########################
-    pdf_dir = project_root / "pdfs" 
-    output_base = project_root / "data" / "01_preprocessed"
+    pdf_dir = Path(pdf_dir) if pdf_dir else project_root / "pdfs" 
+    output_base = Path(preprocessed_dir) if preprocessed_dir else project_root / "data" / dataset / "01_preprocessed"
     output_base.mkdir(parents=True, exist_ok=True)
 
     SAVE_DIAGNOSTIC_IMAGES = False
@@ -372,4 +372,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(description="Step 1: Preprocess PDFs")
+    parser.add_argument("dataset", help="Name of the dataset")
+    parser.add_argument("--pdf-dir", help="Directory containing the input PDFs", default=None)
+    parser.add_argument("--preprocessed", help="Directory for preprocessed images", default=None)
+    args = parser.parse_args()
+    
+    main(args.dataset, args.pdf_dir, args.preprocessed)

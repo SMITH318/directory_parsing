@@ -165,15 +165,15 @@ def create_batch_processor():
         followup_wait_seconds=FOLLOWUP_WAIT_SECONDS, # 1 minute
     )
 
-if __name__ == "__main__":
+def main(dataset: str):
     # 1. Setup Project Paths
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent
 
-    input_filename = "ocr_output_reviewed_batch_mass_2026.03.jsonl"
-    input_file = project_root / "data" / "02_raw_batch_mass" / input_filename
-    output_dir = project_root / "data" / "03_processed_batch_mass"
-    output_file_name = "entries_segmented_batch_class_test.csv"
+    input_file = project_root / "data" / dataset / "04_ocr_output_cleaned.jsonl"
+    output_dir = project_root / "data" / dataset
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_file_name = "05_entries_segmented.csv"
 
     batch_processor = None
 
@@ -206,6 +206,14 @@ if __name__ == "__main__":
                     except:
                         pass
                 batch_processor = None
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Step 5: Group and classify OCR lines into entries")
+    parser.add_argument("dataset", help="Name of the dataset")
+    args = parser.parse_args()
+    
+    main(args.dataset)
 
 
 

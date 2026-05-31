@@ -82,9 +82,14 @@ def create_batch_processor():
         followup_wait_seconds=FOLLOWUP_WAIT_SECONDS, # 1 minute
     )
 
-if __name__ == "__main__":
+def main(dataset: str):
     # 1. Setup Project Paths
-    proj_paths = gen_extract_entries_paths("city", "2026.03.18")
+    script_dir = Path(__file__).resolve().parent
+    project_root = script_dir.parent
+    data_dir = project_root / "data" / dataset
+    
+    input_file = data_dir / "08_city_entries.csv"
+    output_file_name = "09_city_entries_parsed.csv"
 
     batch_processor = None
 
@@ -94,7 +99,9 @@ if __name__ == "__main__":
             if not batch_processor:
                 batch_processor = create_batch_processor()
             if batch_processor.batch_prompt(
-                *proj_paths,
+                input_file,
+                data_dir,
+                output_file_name
                 # record_prompts_responses=True
             ):
                 break
@@ -114,4 +121,13 @@ if __name__ == "__main__":
                     except:
                         pass
                 batch_processor = None
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Step 9: Parse City Entries")
+    parser.add_argument("dataset", help="Name of the dataset")
+    args = parser.parse_args()
+    
+    main(args.dataset)
+
 

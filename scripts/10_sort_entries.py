@@ -8,15 +8,7 @@ checks for duplicate rows and entry_ids.
 import pandas as pd
 from pathlib import Path
 
-# Define the data directory
-data_dir = Path(__file__).parent.parent / "data" / "04_extracted_entries_gemini_2026.03.18"
-
-# Define input and output file paths
-city_input = data_dir / "amd_1918_city_entries.csv"
-doc_input = data_dir / "amd_1918_doc_entries.csv"
-
-city_output = data_dir / "amd_1918_city_entries_sorted.csv"
-doc_output = data_dir / "amd_1918_doc_entries_sorted.csv"
+import argparse
 
 def sort_and_save(input_file, output_file, file_name):
     """Sort CSV by entry_id and save to output file. Check for duplicates."""
@@ -47,8 +39,29 @@ def sort_and_save(input_file, output_file, file_name):
     print(f"  Saved to {output_file.name}")
     print()
 
-# Process both files
-sort_and_save(city_input, city_output, "City Entries")
-sort_and_save(doc_input, doc_output, "Doc Entries")
+def main(dataset: str):
+    # Define the data directory
+    script_dir = Path(__file__).resolve().parent
+    project_root = script_dir.parent
+    data_dir = project_root / "data" / dataset
+    
+    # Define input and output file paths
+    city_input = data_dir / "09_city_entries_parsed.csv"
+    doc_input = data_dir / "09_doc_entries_parsed.csv"
+    
+    city_output = data_dir / "10_city_entries_sorted.csv"
+    doc_output = data_dir / "10_doc_entries_sorted.csv"
 
-print("✓ Done! Both files have been sorted and saved with '_sorted' postfix.")
+    # Process both files
+    sort_and_save(city_input, city_output, "City Entries")
+    sort_and_save(doc_input, doc_output, "Doc Entries")
+
+    print("✓ Done! Both files have been sorted and saved with '_sorted' postfix.")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Step 10: Sort CSV parsed entry files")
+    parser.add_argument("dataset", help="Name of the dataset")
+    args = parser.parse_args()
+    
+    main(args.dataset)
+

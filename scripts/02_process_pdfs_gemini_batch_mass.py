@@ -103,13 +103,14 @@ def create_batch_processor():
         followup_wait_seconds=FOLLOWUP_WAIT_SECONDS,
     )
 
-if __name__ == "__main__":
+def main(dataset: str, preprocessed_dir: str = None):
     # 1. Setup Project Paths
     script_dir = Path(__file__).parent
     project_root = script_dir if (script_dir / "data").exists() else script_dir.parent
-    preprocessed_dir = project_root / "data" / "01_preprocessed"
+    
+    preprocessed_dir = Path(preprocessed_dir) if preprocessed_dir else project_root / "data" / dataset / "01_preprocessed"
     metadata_path = preprocessed_dir / "all_metadata.csv"
-    output_dir = project_root / "data" / "02_raw_batch_mass"
+    output_dir = project_root / "data" / dataset
     output_dir.mkdir(parents=True, exist_ok=True)
 
     batch_processor = None
@@ -122,7 +123,7 @@ if __name__ == "__main__":
             if batch_processor.batch_prompt(
                 metadata_path, 
                 output_dir, 
-                "ocr_output_retest.jsonl",
+                "02_ocr_output.jsonl",
                 # [done_file], 
                 # record_prompts_responses=True
             ):
@@ -143,3 +144,12 @@ if __name__ == "__main__":
                     except:
                         pass
                 batch_processor = None
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Step 2: OCR Processing")
+    parser.add_argument("dataset", help="Name of the dataset")
+    parser.add_argument("--preprocessed", help="Directory for preprocessed images", default=None)
+    args = parser.parse_args()
+    
+    main(args.dataset, args.preprocessed)
