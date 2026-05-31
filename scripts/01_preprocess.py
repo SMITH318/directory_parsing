@@ -13,6 +13,7 @@ Step 1: Preprocess PDFs (300 DPI) - Memory Efficient Version
 import os
 import json
 import gc
+import sys
 import cv2
 import numpy as np
 import re
@@ -369,6 +370,13 @@ def main(dataset: str, pdf_dir: str = None, preprocessed_dir: str = None):
     logger.info(f"Finished processing {len(all_metadata)} PDFs.")
     print(f"📁 Output: {output_base / 'all_metadata.json'}")
     logger.info(f"Output metadata at {output_base / 'all_metadata.json'}")
+    
+    if len(all_metadata) > 0:
+        print("✓ Step completed successfully")
+        return 0
+    else:
+        print("✗ Step failed: no PDFs processed")
+        return 1
 
 
 if __name__ == "__main__":
@@ -379,4 +387,5 @@ if __name__ == "__main__":
     parser.add_argument("--preprocessed", help="Directory for preprocessed images", default=None)
     args = parser.parse_args()
     
-    main(args.dataset, args.pdf_dir, args.preprocessed)
+    exit_code = main(args.dataset, args.pdf_dir, args.preprocessed)
+    sys.exit(exit_code)

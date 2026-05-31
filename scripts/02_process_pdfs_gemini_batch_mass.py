@@ -11,6 +11,7 @@ Includes error handling and retry logic for API rate limits and transient errors
 from pydantic import BaseModel
 from google.genai import errors
 import datetime
+import sys
 from _OCRStep import *
 from _BatchProcessor import *
 
@@ -114,6 +115,7 @@ def main(dataset: str, preprocessed_dir: str = None):
     output_dir.mkdir(parents=True, exist_ok=True)
 
     batch_processor = None
+    all_processed = False
 
     for i in range(MAX_ITERATIONS):
         try:
@@ -127,6 +129,7 @@ def main(dataset: str, preprocessed_dir: str = None):
                 # [done_file], 
                 # record_prompts_responses=True
             ):
+                all_processed = True
                 break
         except Exception as e:
             if isinstance(e, errors.APIError) and (e.code == 429 or e.code == 503):
@@ -144,6 +147,13 @@ def main(dataset: str, preprocessed_dir: str = None):
                     except:
                         pass
                 batch_processor = None
+    
+    if all_processed:
+        print("✓ Step completed successfully")
+        return 0
+    else:
+        print("✗ Step did not complete all inputs")
+        return 1
 
 if __name__ == "__main__":
     import argparse
@@ -152,4 +162,5 @@ if __name__ == "__main__":
     parser.add_argument("--preprocessed", help="Directory for preprocessed images", default=None)
     args = parser.parse_args()
     
-    main(args.dataset, args.preprocessed)
+    exit_code = main(args.dataset, args.preprocessed)
+    sys.exit(exit_code)

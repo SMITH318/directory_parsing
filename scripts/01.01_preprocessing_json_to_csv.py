@@ -3,6 +3,7 @@ Converts the JSON metadata from 01_preprocess.py into a CSV format for easier an
 """
 import json
 import csv
+import sys
 from pathlib import Path
 import argparse
 
@@ -45,6 +46,8 @@ def main(dataset: str, preprocessed_dir: str = None):
                     })
 
     print(f"CSV file created successfully at {csv_path}")
+    print("✓ Step completed successfully")
+    return 0
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Convert metadata JSON to CSV")
@@ -52,4 +55,5 @@ if __name__ == "__main__":
     parser.add_argument("--preprocessed", help="Directory for preprocessed images", default=None)
     args = parser.parse_args()
     
-    main(args.dataset, args.preprocessed)
+    exit_code = main(args.dataset, args.preprocessed)
+    sys.exit(exit_code)

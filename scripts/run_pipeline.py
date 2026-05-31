@@ -71,23 +71,20 @@ def main():
             else:
                 print(f"Skipping {manual_step_name}, output {expected_output.name} already exists.")
             continue
-            
+
         script_path = script_dir / script_name
         if not script_path.exists():
             print(f"[ERROR] Script not found: {script_path}. Stopping.")
             sys.exit(1)
-            
-        # Check if we should skip because output exists
-        if expected_output and expected_output.exists():
-            print(f"Skipping {script_name}, output {expected_output.name} already exists.")
-            continue
-            
-        # Run the script
+
+        # Always run the script so it can report success via its exit code
         success = run_script(script_path, script_args)
         if not success:
+            print(f"Pipeline stopping due to failure in {script_name}")
             sys.exit(1)
 
     print("\nPipeline completed successfully!")
+    return 0
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
