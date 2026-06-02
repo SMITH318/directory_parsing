@@ -211,6 +211,9 @@ def main(dataset: str):
                 batch_processor = None
     
     if all_processed:
+        df = pd.read_csv(output_dir / output_file_name, encoding='utf-8')
+        df_sorted = df.sort_values(by=["publication", "page_number", "column"])
+        df_sorted.to_csv(output_dir / output_file_name, index=False, encoding='utf-8')
         print("✓ Step completed successfully")
         return 0
     else:
