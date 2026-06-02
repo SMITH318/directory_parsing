@@ -193,6 +193,15 @@ def main(dataset: str, pdf_dir: str = None, preprocessed_dir: str = None):
     ################### Constant/paths start here ##########################
     pdf_dir = Path(pdf_dir) if pdf_dir else project_root / "pdfs" 
     output_base = Path(preprocessed_dir) if preprocessed_dir else project_root / "data" / dataset / "01_preprocessed"
+    output_metadata = output_base / 'all_metadata.json'
+    if output_base.exists() and output_metadata.exists():
+        print(f"Target directory and metadata.json for preprocessing exist ({output_base})")
+        user_input = input("(R)egenerate all images OR (s)kip and continue (R|s)?")
+        if user_input.startswith('s'):
+            return 0
+        if not user_input.startswith('R'):
+            logger.error(f"Unexpected response ({user_input}) to regeneration")
+            return 1
     output_base.mkdir(parents=True, exist_ok=True)
 
     SAVE_DIAGNOSTIC_IMAGES = False
@@ -336,7 +345,7 @@ def main(dataset: str, pdf_dir: str = None, preprocessed_dir: str = None):
                         continue
 
                     page_snippets.append({
-                        "path": str(snip_path),
+                        "path": str(snip_path.relative_to(project_root)),
                         "x_offset": int(x1),
                         "y_offset": int(y1_safe),
                         "column": int(c_idx)
@@ -368,8 +377,8 @@ def main(dataset: str, pdf_dir: str = None, preprocessed_dir: str = None):
 
     print(f"\nDone! Processed {len(all_metadata)} PDFs")
     logger.info(f"Finished processing {len(all_metadata)} PDFs.")
-    print(f"📁 Output: {output_base / 'all_metadata.json'}")
-    logger.info(f"Output metadata at {output_base / 'all_metadata.json'}")
+    print(f"📁 Output: {output_metadata}")
+    logger.info(f"Output metadata at {output_metadata}")
     
     if len(all_metadata) > 0:
         print("✓ Step completed successfully")
