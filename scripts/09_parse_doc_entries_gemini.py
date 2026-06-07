@@ -9,6 +9,7 @@ The parsed doctor entries are saved in a new CSV file for use in later stages of
 from pydantic import BaseModel
 from typing import Literal
 from google.genai import errors
+import sys
 from _ExtractEntriesStep import *
 from _BatchProcessor import *
 
@@ -166,6 +167,7 @@ def main(dataset: str):
     output_file_name = "09_doc_entries_parsed.csv"
 
     batch_processor = None
+    all_processed = False
 
     for i in range(100):
         try:
@@ -178,6 +180,7 @@ def main(dataset: str):
                 output_file_name
                 # record_prompts_responses=True
             ):
+                all_processed = True
                 break
         except Exception as e:
             if isinstance(e, errors.APIError) and (e.code == 429 or e.code == 503):
@@ -195,6 +198,13 @@ def main(dataset: str):
                     except:
                         pass
                 batch_processor = None
+    
+    if all_processed:
+        print("✓ Step completed successfully")
+        return 0
+    else:
+        print("✗ Step did not complete all inputs")
+        return 1
 
 if __name__ == "__main__":
     import argparse
@@ -202,5 +212,6 @@ if __name__ == "__main__":
     parser.add_argument("dataset", help="Name of the dataset")
     args = parser.parse_args()
     
-    main(args.dataset)
+    exit_code = main(args.dataset)
+    sys.exit(exit_code)
 

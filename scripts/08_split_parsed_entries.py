@@ -8,6 +8,7 @@ doctor entries following a city entry are assigned that city ID.
 """
 import pandas as pd
 from pathlib import Path
+import sys
 
 import argparse
 
@@ -56,12 +57,20 @@ def main(dataset: str, pdf_dir: str = None, preprocessed_dir: str = None):
 
     cities_df.to_csv(cities_file, encoding="utf-8", index=False)
     docs_df.to_csv(docs_file, encoding="utf-8", index=False)
+    
+    if len(docs_df) > 0 and len(cities_df) > 0:
+        print("✓ Step completed successfully")
+        return 0
+    else:
+        print("✗ Step failed: not enough entries were split")
+        return 1
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Step 8: Split Parsed Entries")
     parser.add_argument("dataset", help="Name of the dataset")
     args = parser.parse_args()
     
-    main(args.dataset)
+    exit_code = main(args.dataset)
+    sys.exit(exit_code)
 
 

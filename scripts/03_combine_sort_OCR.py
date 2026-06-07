@@ -7,6 +7,7 @@ and were skipped in the OCR process.
 import pandas as pd
 from pathlib import Path
 import json
+import sys
 
 import argparse
 
@@ -41,11 +42,19 @@ def main(dataset: str):
     
     # save the combined, sorted, deduped DataFrame to a new JSONL file
     df_deduped.to_json(output_file, orient="records", force_ascii=False, lines=True)
+    
+    if len(df_deduped) > 0:
+        print("✓ Step completed successfully")
+        return 0
+    else:
+        print("✗ Step failed: no data to output")
+        return 1
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Step 3: Combine and Sort OCR Output")
     parser.add_argument("dataset", help="Name of the dataset")
     args = parser.parse_args()
     
-    main(args.dataset)
+    exit_code = main(args.dataset)
+    sys.exit(exit_code)
 

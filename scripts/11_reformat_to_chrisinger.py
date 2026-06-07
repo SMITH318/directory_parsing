@@ -5,6 +5,7 @@ Step 11: Reformat AMD 1918 doc entries to match Ben's pilot format.
 
 import pandas as pd
 import os
+import sys
 from pathlib import Path
 
 def convert_year_to_4_digit(year_str):
@@ -55,7 +56,7 @@ def parse_school_code(school_str):
     return state_code, school_num, grad_year
 
 
-def reformat_amd_1918(input_csv, output_csv, city_csv=None):
+def reformat_amd_1918(input_csv, output_csv, city_csv=None) -> int:
     """
     Reformat AMD 1918 doc entries.
     
@@ -190,6 +191,7 @@ def reformat_amd_1918(input_csv, output_csv, city_csv=None):
     print(f"Output columns: {output_df.columns.tolist()}")
     print(f"✓ Reformatting complete!")
     print(f"Output file: {output_csv}")
+    return 0
 
 
 def main(dataset: str):
@@ -205,14 +207,14 @@ def main(dataset: str):
     # Check if input file exists
     if not input_file.exists():
         print(f"Error: Input file not found: {input_file}")
-        sys.exit(1)
+        return 1
     if output_file.exists():
         print(f"Error: Output file already exists! Stopping: {output_file}")
-        sys.exit(1)
+        return 1
     output_file.parent.mkdir(parents=True, exist_ok=True)
     
     # Run reformatting
-    reformat_amd_1918(str(input_file), str(output_file), str(city_file) if city_file.exists() else None)
+    return reformat_amd_1918(str(input_file), str(output_file), str(city_file) if city_file.exists() else None)
 
 if __name__ == "__main__":
     import argparse
@@ -221,5 +223,6 @@ if __name__ == "__main__":
     parser.add_argument("dataset", help="Name of the dataset")
     args = parser.parse_args()
     
-    main(args.dataset)
+    exit_code = main(args.dataset)
+    sys.exit(exit_code)
 

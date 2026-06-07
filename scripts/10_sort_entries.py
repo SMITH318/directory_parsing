@@ -7,6 +7,7 @@ checks for duplicate rows and entry_ids.
 
 import pandas as pd
 from pathlib import Path
+import sys
 
 import argparse
 
@@ -57,11 +58,14 @@ def main(dataset: str):
     sort_and_save(doc_input, doc_output, "Doc Entries")
 
     print("✓ Done! Both files have been sorted and saved with '_sorted' postfix.")
+    print("✓ Step completed successfully")
+    return 0
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Step 10: Sort CSV parsed entry files")
     parser.add_argument("dataset", help="Name of the dataset")
     args = parser.parse_args()
     
-    main(args.dataset)
+    exit_code = main(args.dataset)
+    sys.exit(exit_code)
 

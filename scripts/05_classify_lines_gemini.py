@@ -8,6 +8,7 @@ Step 5: Group and classify OCR lines into entries
 
 from google.genai import errors
 from typing import Literal
+import sys
 from _AStepConfiguration import *
 from _BatchProcessor import *
 import logging
@@ -176,6 +177,7 @@ def main(dataset: str):
     output_file_name = "05_entries_segmented.csv"
 
     batch_processor = None
+    all_processed = False
 
     for i in range(100):
         try:
@@ -188,6 +190,7 @@ def main(dataset: str):
                 output_file_name
                 # record_prompts_responses=True
             ):
+                all_processed = True
                 break
      
         except Exception as e:
@@ -206,6 +209,16 @@ def main(dataset: str):
                     except:
                         pass
                 batch_processor = None
+    
+    if all_processed:
+        df = pd.read_csv(output_dir / output_file_name, encoding='utf-8')
+        df_sorted = df.sort_values(by=["publication", "page_number", "column"])
+        df_sorted.to_csv(output_dir / output_file_name, index=False, encoding='utf-8')
+        print("✓ Step completed successfully")
+        return 0
+    else:
+        print("✗ Step did not complete all inputs")
+        return 1
 
 if __name__ == "__main__":
     import argparse
@@ -213,7 +226,8 @@ if __name__ == "__main__":
     parser.add_argument("dataset", help="Name of the dataset")
     args = parser.parse_args()
     
-    main(args.dataset)
+    exit_code = main(args.dataset)
+    sys.exit(exit_code)
 
 
 
