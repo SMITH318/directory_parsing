@@ -16,8 +16,17 @@ from pathlib import Path
 from typing import List
 import sys
 import argparse
+import logging
 
 sys.stdout.reconfigure(encoding='utf-8')
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+  handlers=[
+      logging.FileHandler('09_sanity_check.log', mode='w', encoding='utf-8'),
+      logging.StreamHandler(sys.stderr)
+  ],
+  level=logging.WARNING) ## <=================== Change logging level here
 
 # expects either both split out docs and cities (with IDs) or classified entries with no IDs
 START_SPLIT = True#False
@@ -59,6 +68,8 @@ def check_missing_ids(df:pd.DataFrame, id_col: str) -> List[str]:
     return missing
 
 def main(dataset: str):
+    any_warnings = False
+    any_errors = False
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent
     data_dir = project_root / "data" / dataset
@@ -69,8 +80,8 @@ def main(dataset: str):
         split_docs_path = data_dir / "08_doc_entries.csv"
         split_cities_path = data_dir / "08_city_entries.csv"
         if not (split_docs_path.exists() and split_cities_path.exists()):
-            print(
-                f"\n❌ Error: only one input classified split provided:",
+            logger.error(
+                f"\n❌ Error: only one input classified split provided: "
                 f"{'docs' if split_cities_path else 'cities'} missing"
             )
             sys.exit(1)
@@ -78,8 +89,8 @@ def main(dataset: str):
     parsed_docs_path = data_dir / "09_doc_entries_parsed.csv"
     parsed_cities_path = data_dir / "09_city_entries_parsed.csv"
     if not (parsed_docs_path.exists() and parsed_cities_path.exists()):
-        print(
-            f"\n❌ Error: only one step 9 output provided:",
+        logger.error(
+            f"\n❌ Error: only one step 9 output provided: "
             f"{'docs' if parsed_cities_path else 'cities'} missing"
         )
         sys.exit(1)
@@ -92,26 +103,27 @@ def main(dataset: str):
             classified_cities = pd.read_csv(split_cities_path, encoding="utf-8")
             classified_entries = pd.concat([classified_docs, classified_cities], ignore_index=True)
     except Exception as e:
-        print(f"Error loading classified entries input: {str(e)}")
+        logger.error(f"Error loading classified entries input: {str(e)}")
         sys.exit(1)
     try:
         parsed_docs = pd.read_csv(parsed_docs_path, encoding="utf-8")
         parsed_cities = pd.read_csv(parsed_cities_path, encoding="utf-8")
     except Exception as e:
-        print(f"Error loading parsed entries output: {str(e)}")
+        logger.error(f"Error loading parsed entries output: {str(e)}")
         sys.exit(1)
 
-    print("\n" + "=" * 80)
-    print("SANITY CHECK REPORT - ENTRY PARSING CHECKS")
-    print("-" * 80 + "\n")
+    logger.info("\n" + "=" * 80)
+    logger.info("SANITY CHECK REPORT - ENTRY PARSING CHECKS")
+    logger.info("-" * 80 + "\n")
 
     # Verify no repeated ids in parsed entries
     all_ids = pd.concat([parsed_docs["entry_id"], parsed_cities["entry_id"]], ignore_index=True)
     duplicated_ids = all_ids[all_ids.duplicated()]
     if not duplicated_ids.empty:
-        print(f"\n❌ Duplicate IDs found in parsed entries:\n{duplicated_ids.to_string()}\n")
+        logger.error(f"❌ Duplicate IDs found in parsed entries:\n{duplicated_ids.to_string()}")
+        any_errors = True
     else:
-        print("✓ No duplicate IDs found in parsed entries")
+        logger.info("✓ No duplicate IDs found in parsed entries")
 
     # Verify no seqentially missing ids in parsed entries
     entry_counts = classified_entries["entryType"].value_counts()
@@ -119,34 +131,35 @@ def main(dataset: str):
     # STATE get IDs but aren't preserved, so expect that numnber to be missing
     num_missing_expected = entry_counts.get("STATE", 0) if not START_SPLIT else classified_entries['state_name'].nunique()
     if missing and num_missing_expected - 1!= len(missing):  # -1 for starting state with no ID
-        print(f"\n❌ Missing {len(missing)} sequential ID numbers (expected {num_missing_expected - 1}): \n\t{missing}\n")
-        # print("⚠ Skipping deeper ID verification")
-        # return
+        logger.error(f"❌ Missing {len(missing)} sequential ID numbers (expected {num_missing_expected - 1}): \n\t{missing}")
+        any_errors = True
     else:
-        print(f"✓ No missing sequential IDs (outside of expected {num_missing_expected - 1})")
+        logger.info(f"✓ No missing sequential IDs (outside of expected {num_missing_expected - 1})")
 
     # Verify parsed entries have same number of cities and docs as classified entries
     if entry_counts.get("DOC", 0) != len(parsed_docs):
-        print(
-            f"\n❌ Number of DOC entries mismatch:",
+        logger.error(
+            f"❌ Number of DOC entries mismatch: "
             f"classified has {entry_counts.get('DOC', 0)}, parsed has {len(parsed_docs)}"
         )
+        any_errors = True
         doc_in_entries = classified_entries[classified_entries["entryType"] == "DOC"]
         doc_in_counts = doc_in_entries.groupby(['publication', 'page_number', 'column'])['x'].count().reset_index(name='count')
         doc_out_counts = parsed_docs.groupby(['publication', 'page_number', 'column'])['x'].count().reset_index(name='count')
         doc_counts = doc_in_counts.merge(doc_out_counts, on = ['publication', 'page_number', 'column'], suffixes=['_in', '_out'], validate='1:1')
         doc_off_counts = doc_counts[doc_counts["count_in"] != doc_counts["count_out"]]
-        print(doc_off_counts)
+        logger.error(doc_off_counts.to_string())
     else:
-        print("✓ Number of DOC entries matches")
+        logger.info("✓ Number of DOC entries matches")
 
     if entry_counts.get("CITY", 0) != len(parsed_cities):
-        print(
-            f"\n❌ Number of CITY entries mismatch:",
+        logger.error(
+            f"❌ Number of CITY entries mismatch: "
             f"classified has {entry_counts.get('CITY', 0)}, parsed has {len(parsed_cities)}"
         )
+        any_errors = True
     else:
-        print("✓ Number of CITY entries matches")
+        logger.info("✓ Number of CITY entries matches")
 
     # Verify all classified entry IDs are in parsed entries
     if 'entry_id' in classified_entries.columns:
@@ -157,11 +170,13 @@ def main(dataset: str):
         missing_ids = classified_ids - parsed_doc_ids - parsed_city_ids
 
         if missing_ids:
-            print(f"\n❌ Classify entry IDs ({len(missing_ids)}) not found in parsed docs:\n{missing_ids.to_string()}\n")
+            logger.error(f"❌ Classify entry IDs ({len(missing_ids)}) not found in parsed docs:\n{missing_ids.to_string()}")
+            any_errors = True
         else:
-            print("✓ All classified doc entry IDs are in parsed entries")
+            logger.info("✓ All classified doc entry IDs are in parsed entries")
     else:
-        print("⚠ 'entry_id' column not found in classified entries, skipping ID consistency check with parsed entries")
+        logger.warning("⚠ 'entry_id' column not found in classified entries, skipping ID consistency check with parsed entries")
+        any_warnings = True
 
     # Verify all city entries referenced by a doc entry
     city_with_doc = parsed_cities.merge(
@@ -174,12 +189,13 @@ def main(dataset: str):
     missing_doc_refs = city_with_doc[city_with_doc["entry_id_y"].isna()]
     if not missing_doc_refs.empty:
         missing_doc_refs = missing_doc_refs.rename(columns={"entry_id_x": "city_entry_id"})
-        print(
-            f"\n⚠ City entries ({len(missing_doc_refs)}) with no doc references (this is OK if city a 'See' or small):",
+        logger.warning(
+            f"⚠ City entries ({len(missing_doc_refs)}) with no doc references (this is OK if city a 'See' or small): "
             f"\n{missing_doc_refs[['city_entry_id']].to_string()}\n"
         )
+        any_warnings = True
     else:
-        print("✓ All city entries have valid doc references")
+        logger.info("✓ All city entries have valid doc references")
 
     # Verify all doc entries reference a valid city entry
     doc_with_city = parsed_docs.merge(
@@ -192,16 +208,24 @@ def main(dataset: str):
     missing_city_refs = doc_with_city[doc_with_city["entry_id_y"].isna()]
     if not missing_city_refs.empty:
         missing_city_refs = missing_city_refs.rename(columns={"entry_id_x": "doc_entry_id"})
-        print(
-            f"\n❌ Doc entries ({len(missing_city_refs)}) with non-existent city references:",
-            f"\n{missing_city_refs[['doc_entry_id', 'city_id']].to_string()}\n"
+        logger.error(
+            f"❌ Doc entries ({len(missing_city_refs)}) with non-existent city references: "
+            f"\n{missing_city_refs[['doc_entry_id', 'city_id']].to_string()}"
         )
+        any_errors = True
     else:
-        print("✓ All doc entries reference valid city entries")
+        logger.info("✓ All doc entries reference valid city entries")
+
+    # Print reviewed paths to stdout upon successful sanity check
+    print(parsed_docs_path)
+    print(parsed_cities_path)
+    if any_errors or any_warnings:
+        return 1
+    return 0
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Step 9: Sanity Check Parsed Entries")
     parser.add_argument("dataset", help="Name of the dataset")
     args = parser.parse_args()
     
-    main(args.dataset)
+    sys.exit(main(args.dataset))

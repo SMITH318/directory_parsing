@@ -7,6 +7,15 @@ import pandas as pd
 import os
 import sys
 from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+  handlers=[
+      logging.FileHandler('11_reformat_to_chrisinger.log', mode='w', encoding='utf-8'),
+      logging.StreamHandler(sys.stderr)
+  ],
+  level=logging.WARNING) ## <=================== Change logging level here
 
 def convert_year_to_4_digit(year_str):
     """Convert 2-digit year to 4-digit year, assuming 1900s."""
@@ -71,19 +80,18 @@ def reformat_amd_1918(input_csv, output_csv, city_csv=None) -> int:
     """
     
     # Read the AMD 1918 data
-    print(f"Reading {input_csv}...")
+    logger.info(f"Reading {input_csv}...")
     df = pd.read_csv(input_csv, low_memory=False)
     
-    print(f"Original shape: {df.shape}")
-    print(f"Original columns: {df.columns.tolist()}")
-    # print(df.info())
+    logger.info(f"Original shape: {df.shape}")
+    logger.info(f"Original columns: {df.columns.tolist()}")
     
     # Load city entries for county/city information
     city_df = None
     if city_csv and Path(city_csv).exists():
-        print(f"Reading city entries from {city_csv}...")
+        logger.info(f"Reading city entries from {city_csv}...")
         city_df = pd.read_csv(city_csv)
-        print(f"City entries shape: {city_df.shape}")
+        logger.info(f"City entries shape: {city_df.shape}")
         # Create a mapping from entry_id to city info
         city_map = city_df[['entry_id', 'name', 'county_name']].set_index('entry_id').to_dict('index')
     else:
@@ -184,13 +192,12 @@ def reformat_amd_1918(input_csv, output_csv, city_csv=None) -> int:
     output_df['misc.info'] = df['other_info']
     
     # Save output
-    print(f"Writing to {output_csv}...")
     output_df.to_csv(output_csv, index=False)
     
-    print(f"Output shape: {output_df.shape}")
-    print(f"Output columns: {output_df.columns.tolist()}")
-    print(f"✓ Reformatting complete!")
-    print(f"Output file: {output_csv}")
+    logger.info(f"Output shape: {output_df.shape}")
+    logger.info(f"Output columns: {output_df.columns.tolist()}")
+    logger.info(f"✓ Reformatting complete! ({output_csv})")
+    print(output_csv)
     return 0
 
 
@@ -206,10 +213,10 @@ def main(dataset: str):
     
     # Check if input file exists
     if not input_file.exists():
-        print(f"Error: Input file not found: {input_file}")
+        logger.error(f"Error: Input file not found: {input_file}")
         return 1
     if output_file.exists():
-        print(f"Error: Output file already exists! Stopping: {output_file}")
+        logger.error(f"Error: Output file already exists! Stopping: {output_file}")
         return 1
     output_file.parent.mkdir(parents=True, exist_ok=True)
     
@@ -225,4 +232,3 @@ if __name__ == "__main__":
     
     exit_code = main(args.dataset)
     sys.exit(exit_code)
-

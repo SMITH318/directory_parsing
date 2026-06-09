@@ -3,27 +3,40 @@ import argparse
 import subprocess
 import sys
 from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+  handlers=[
+      logging.FileHandler('run_pipeline.log', mode='w', encoding='utf-8'),
+      logging.StreamHandler(sys.stderr)
+  ],
+  level=logging.INFO) ## <=================== Change logging level here
 
 def run_script(script_path: Path, args: list[str]) -> bool:
-    print(f"\n{'='*80}")
-    print(f"Running: {script_path.name} {' '.join(args)}")
-    print(f"{'='*80}")
+    logger.info(f"\n{'='*80}")
+    logger.info(f"Running: {script_path.name} {' '.join(args)}")
+    logger.info(f"{'-'*80}")
     
     result = subprocess.run([sys.executable, str(script_path)] + args)
+    logger.info(f"{'-'*80}")
     if result.returncode != 0:
-        print(f"\n[ERROR] {script_path.name} failed with return code {result.returncode}")
+        logger.error(f"{script_path.name} failed with return code {result.returncode}")
         return False
+    logger.info("Success!")
     return True
 
 def prompt_manual_step(step_name: str, expected_file: Path):
-    print(f"\n{'-'*80}")
-    print(f"MANUAL STEP REQUIRED: {step_name}")
-    print(f"Expected output file not found: {expected_file}")
-    print("Please complete this manual step and then restart the pipeline.")
-    print(f"{'-'*80}")
+    logger.warning(f"\n{'='*80}")
+    logger.warning(f"MANUAL STEP REQUIRED: {step_name}")
+    logger.warning(f"Expected output file not found: {expected_file}")
+    logger.warning("Please complete this manual step and then restart the pipeline.")
+    logger.warning(f"{'='*80}")
     sys.exit(0)
 
 def main():
+    # TODO: have file input/outputs be passed to scripts
+
     parser = argparse.ArgumentParser(description="Directory Parsing Pipeline")
     parser.add_argument("dataset", help="Name of the dataset")
     parser.add_argument("--pdf-dir", help="Directory containing the input PDFs", default=None)
@@ -48,13 +61,13 @@ def main():
         ("01_preprocess.py", all_args, Path(preprocessed_arg) / "all_metadata.json", None),
         ("01.01_preprocessing_json_to_csv.py", preproc_args, Path(preprocessed_arg) / "all_metadata.csv", None),
         ("02_process_pdfs_gemini_batch_mass.py", preproc_args, data_dir / "02_ocr_output.jsonl", None),
-        ("02_sanity_check.py", preproc_args, None, None), # sanity checks just print stuff usually, no specific output file to gate on, or we let them run.
+        ("02_sanity_check.py", preproc_args, None, None), 
         ("03_combine_sort_OCR.py", [dataset], data_dir / "03_ocr_output_combined_sorted.jsonl", None),
         (None, None, data_dir / "04_ocr_output_cleaned.jsonl", "04_clean_OCR_manual.ipynb"),
         ("05_classify_lines_gemini.py", [dataset], data_dir / "05_entries_segmented.csv", None),
         ("05_sanity_check.py", [dataset], None, None),
         (None, None, data_dir / "07_entries_segmented_man_cleaned.csv", "Prepare for Review & Review Changes (Manual)"),
-        ("08_split_parsed_entries.py", [dataset], data_dir / "08_doc_entries.csv", None), # should also output 08_city_entries.csv
+        ("08_split_parsed_entries.py", [dataset], data_dir / "08_doc_entries.csv", None), 
         ("09_parse_doc_entries_gemini.py", [dataset], data_dir / "09_doc_entries_parsed.csv", None),
         ("09_parse_city_entries_gemini.py", [dataset], data_dir / "09_city_entries_parsed.csv", None),
         ("09_sanity_check.py", [dataset], None, None),
@@ -69,21 +82,22 @@ def main():
             if not expected_output.exists():
                 prompt_manual_step(manual_step_name, expected_output)
             else:
-                print(f"Skipping {manual_step_name}, output {expected_output.name} already exists.")
+                logger.info(f"\n{'='*80}")
+                logger.info(f"Skipping: {manual_step_name}, output {expected_output.name} already exists.")
             continue
 
         script_path = script_dir / script_name
         if not script_path.exists():
-            print(f"[ERROR] Script not found: {script_path}. Stopping.")
+            logger.error("Script not found: {script_path}. Stopping.")
             sys.exit(1)
 
         # Always run the script so it can report success via its exit code
         success = run_script(script_path, script_args)
         if not success:
-            print(f"Pipeline stopping due to failure in {script_name}")
+            logger.error(f"Pipeline stopping due to failure in {script_name}")
             sys.exit(1)
 
-    print("\nPipeline completed successfully!")
+    logger.error("\nPipeline completed successfully!")
     return 0
 
 if __name__ == "__main__":

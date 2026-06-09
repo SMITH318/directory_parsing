@@ -20,11 +20,21 @@ import sys
 sys.stdout.reconfigure(encoding='utf-8')
 
 import argparse
+import logging
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    handlers=[
+        logging.FileHandler('02_sanity_check.log', mode='w', encoding='utf-8'),
+        logging.StreamHandler(sys.stderr)
+    ],
+    level=logging.INFO
+)
 
 COLUMNS_PER_PAGE = 3
 SKIP_IMAGE_LOADING = False
 
-def main(dataset: str, preprocessed_dir: str = None):
+def main(dataset: str, preprocessed_dir: str = None) -> int:
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent
     data_dir = project_root / "data" / dataset
@@ -38,19 +48,19 @@ def main(dataset: str, preprocessed_dir: str = None):
         with open(metadata_path, 'r') as f:
             metadata = json.load(f)
     except Exception as e:
-        print(f"Error loading metadata {metadata_path.name}: {str(e)}")
+        logger.error(f"Error loading metadata {metadata_path.name}: {str(e)}")
         sys.exit(1)
         
     # Load OCR output JSONL file
     try:
         ocr_data = pd.read_json(ocr_path, lines=True)
     except Exception as e:
-        print(f"Error loading OCR output {ocr_path.name}: {str(e)}")
+        logger.error(f"Error loading OCR output {ocr_path.name}: {str(e)}")
         sys.exit(1)
 
-    print("=" * 80)
-    print("SANITY CHECK REPORT - IMAGE & OCR CONSISTENCY CHECKS")
-    print("-" * 80 + "\n")
+    logger.info("=" * 80)
+    logger.info("SANITY CHECK REPORT - IMAGE & OCR CONSISTENCY CHECKS")
+    logger.info("-" * 80)
     any_errors = False
     any_warnings = False
 
@@ -61,10 +71,10 @@ def main(dataset: str, preprocessed_dir: str = None):
     all_pubs_pages_cols_OCRed = True
     if len(metadata) != len(ocr_data["pub"].unique()):
         all_pubs_pages_cols_OCRed = False
-        print(
-            f"\n❌ number of metadata pubs ({len(metadata)})",
+        logger.error((
+            f"❌ number of metadata pubs ({len(metadata)})",
             f"doesn't match number of unique OCRed pubs ({len(ocr_data["pub"].unique())})"
-        )
+        ))
         any_errors = True
 
     # Examine all input publications consistency with OCR data
@@ -77,8 +87,8 @@ def main(dataset: str, preprocessed_dir: str = None):
         # check if number of pages is consistent
         if len(pub_data["pages"]) != len(pub_ocr["page"].unique()):
             all_pubs_pages_cols_OCRed = False
-            print(
-                f"\n❌ in {pub_id}, number of metadata pages {len(pub_data["pages"])},"
+            logger.error(
+                f"❌ in {pub_id}, number of metadata pages {len(pub_data["pages"])},"
                 f"doesn't match number of unique OCRed pages {len(pub_ocr["page"].unique())}"
             )
             any_errors = True
@@ -93,19 +103,19 @@ def main(dataset: str, preprocessed_dir: str = None):
             
             # Check expected columns
             if len(snippets) != COLUMNS_PER_PAGE:
-                print(
-                    f"\n❌ {pub_id} page {page_num}: unexpected number of columns,",
+                logger.error((
+                    f"❌ {pub_id} page {page_num}: unexpected number of columns,",
                     f"found {len(snippets)}"
-                )
+                ))
                 any_errors = True
 
             # Check number of columns match
             if len(snippets) != len(page_ocr["col"].unique()):
                 all_pubs_pages_cols_OCRed = False
-                print(
-                    f"\n❌ in {pub_id}.{page_data["page_num"]}, number of metadata columns {len(snippets)},"
+                logger.error((
+                    f"❌ in {pub_id}.{page_data["page_num"]}, number of metadata columns {len(snippets)},"
                     f"doesn't match number of unique OCRed pages {len(page_ocr["col"].unique())}"
-                )
+                ))
                 any_errors = True
         
             # Examine all columns (snippets) for consistency with OCR data
@@ -124,8 +134,8 @@ def main(dataset: str, preprocessed_dir: str = None):
                 
                 # Flag if any column differs by more than 8 from average
                 if max_deviation > 8:
-                    print(
-                        f"\n❌ {pub_id} page {page_num}: Column lines differ by more than 8: {max_deviation:.1f}",
+                    logger.error(
+                        f"❌ {pub_id} page {page_num}: Column lines differ by more than 8: {max_deviation:.1f}",
                         f"(cols: {column_line_counts})"
                     )
                     any_errors = True
@@ -145,10 +155,10 @@ def main(dataset: str, preprocessed_dir: str = None):
                                 px_per_lines = height // column_line_counts[col]
                                 pixels_per_line_by_page_col[(pub_id, page_num, col)] = px_per_lines
                         else:
-                            print(f"\n❌ Image file not found: {full_path}")
+                            logger.error(f"❌ Image file not found: {full_path}")
                             any_errors = True
                     except Exception as e:
-                        print(f"\n❌ Could not read image: {str(e)}")
+                        logger.error(f"❌ Could not read image: {str(e)}")
                         any_errors = True
 
     # Calculate overall average pixels per line across images and flag any columns that deviate by more than .3x from average
@@ -156,19 +166,24 @@ def main(dataset: str, preprocessed_dir: str = None):
     avg_pix_per_lines = sum(pix_per_line) / len(pix_per_line)
     deviations = {id: pixels for id, pixels in pixels_per_line_by_page_col.items() if abs(pixels - avg_pix_per_lines) > (avg_pix_per_lines*.3)}
     if deviations:
-        print(
-            f"\n⚠ {len(deviations)} columns' pixels per line vary more than .3x from average ({avg_pix_per_lines}):"
+        logger.warning((
+            f"⚠ {len(deviations)} columns' pixels per line vary more than .3x from average ({avg_pix_per_lines}):"
             f"\n\t{"\n\t".join(f"{k}={v}" for k, v in deviations.items())}"
-        )
+        ))
         any_warnings = True
 
     if all_pubs_pages_cols_OCRed:
-        print("✓ All publications, pages, and columns exist in OCR")
+        logger.info("✓ All publications, pages, and columns exist in OCR")
 
     if not any_errors and not any_warnings:
-        print("✓ All checks passed!")
+        logger.info("✓ All checks passed!")
 
-    print("=" * 80 + "\n")
+    logger.info("=" * 80)
+    print(ocr_path)
+
+    if not any_errors and not any_warnings:
+        return 0
+    return 1
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Step 2: Sanity Check OCR Output")
@@ -176,6 +191,6 @@ if __name__ == "__main__":
     parser.add_argument("--preprocessed", help="Directory for preprocessed images", default=None)
     args = parser.parse_args()
     
-    main(args.dataset, args.preprocessed)
+    sys.exit(main(args.dataset, args.preprocessed))
 
 

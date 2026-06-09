@@ -10,6 +10,16 @@ import json
 import sys
 
 import argparse
+import logging
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    handlers=[
+        logging.FileHandler('03_combine_sort_OCR.log', mode='w', encoding='utf-8'),
+        logging.StreamHandler(sys.stderr)
+    ],
+    level=logging.WARNING
+)
 
 SKIP_TEXT = "******* KEEPS FAILING! SKIPPING FOR NOW *******"
 
@@ -35,19 +45,19 @@ def main(dataset: str):
     # create a DataFrame, drop rows with SKIP_TEXT, sort by pub, page, col, and drop duplicates
     df_ocr = pd.DataFrame(ocr_data)
     df_no_skipped = df_ocr.loc[df_ocr["text"] != SKIP_TEXT]
-    print(f"dropped {len(df_ocr)- len(df_no_skipped)} skipped rows, {len(df_no_skipped)} left")
+    logger.warning(f"dropped {len(df_ocr)- len(df_no_skipped)} skipped rows, {len(df_no_skipped)} left")
     df_sorted = df_no_skipped.sort_values(by=["pub", "page", "col"])
     df_deduped = df_sorted.drop_duplicates()
-    print(f"dropped {len(df_sorted)- len(df_deduped)} exact duplicate rows, {len(df_deduped)} left")
+    logger.warning(f"dropped {len(df_sorted)- len(df_deduped)} exact duplicate rows, {len(df_deduped)} left")
     
     # save the combined, sorted, deduped DataFrame to a new JSONL file
     df_deduped.to_json(output_file, orient="records", force_ascii=False, lines=True)
-    
+    print(output_file)
     if len(df_deduped) > 0:
-        print("✓ Step completed successfully")
+        logger.info(f"✓ Step completed successfully ({output_file})")
         return 0
     else:
-        print("✗ Step failed: no data to output")
+        logger.error("✗ Step failed: no data to output")
         return 1
 
 if __name__ == "__main__":

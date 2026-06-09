@@ -14,9 +14,10 @@ from _BatchProcessor import *
 import logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(
-    filename='03_classify_lines_gemini.log', 
-    filemode='a', 
-    encoding='utf-8', 
+    handlers=[
+        logging.FileHandler('05_classify_lines_gemini.log', mode='w', encoding='utf-8'),
+        logging.StreamHandler(sys.stderr)
+    ],
     level=logging.WARNING) ## <=================== Change logging level here
 
 # ***************************** constants *****************************
@@ -130,7 +131,6 @@ class ClassifyLinesStep(AStepConfiguration):
         
         lines_received_txt = f"received {len(entries)} entries at {datetime.datetime.now()}"
         logger.info(lines_received_txt)
-        print("\t", lines_received_txt)
 
         # 4. Save 
         with open(output_file, 'a', encoding='utf-8', newline='') as f_out:
@@ -181,7 +181,7 @@ def main(dataset: str):
 
     for i in range(100):
         try:
-            print("*** Iteration", i, "***")
+            logger.warning(f"*** Iteration {i} ***")
             if not batch_processor:
                 batch_processor = create_batch_processor()
             if batch_processor.batch_prompt(
@@ -196,12 +196,11 @@ def main(dataset: str):
         except Exception as e:
             if isinstance(e, errors.APIError) and (e.code == 429 or e.code == 503):
                 exception = "RESOURCE_EXHAUSTED" if e.code == 429 else "SERVICE UNAVAILABLE"
-                print(f"*** main loop {exception} exception, pausing for {INITIAL_WAIT_SECONDS/60} at {datetime.datetime.now()}... ***")
                 logger.error(f"*** main loop {exception} exception, pausing for {INITIAL_WAIT_SECONDS/60} at {datetime.datetime.now()}... ***")
                 time.sleep(INITIAL_WAIT_SECONDS)
             else:
-                print("*** main loop exception, pressing on ***")
-                print(type(e).__name__, "-", e)
+                logger.error("*** main loop exception, pressing on ***")
+                logger.error(f"{type(e).__name__} - {e}")
                 # something went very wrong, scrub any ongoing batch jobs and processor
                 for job in batch_processor.client.batches.list():
                     try:
@@ -210,14 +209,16 @@ def main(dataset: str):
                         pass
                 batch_processor = None
     
+    file_out = output_dir / output_file_name
+    print(file_out)
     if all_processed:
-        df = pd.read_csv(output_dir / output_file_name, encoding='utf-8')
+        df = pd.read_csv(file_out, encoding='utf-8')
         df_sorted = df.sort_values(by=["publication", "page_number", "column"])
-        df_sorted.to_csv(output_dir / output_file_name, index=False, encoding='utf-8')
-        print("✓ Step completed successfully")
+        df_sorted.to_csv(file_out, index=False, encoding='utf-8')
+        logger.info(f"✓ Step completed successfully ({file_out})")
         return 0
     else:
-        print("✗ Step did not complete all inputs")
+        logger.error("✗ Step did not complete all inputs")
         return 1
 
 if __name__ == "__main__":

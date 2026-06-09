@@ -49,7 +49,8 @@ class ExtractEntriesStep(AStepConfiguration):
         entries = entries[f"{self.entry_type_name}_entries"]
 
         logger.info(f"received {len(entries)} {self.entry_type_name} entries at {datetime.datetime.now()}")
-        print(f"\treceived {len(entries)} {self.entry_type_name} entries at {datetime.datetime.now()}")
+
+        
 
         # 4. Save to CSV
         with open(output_file, 'a', encoding='utf-8', newline='') as f_out:

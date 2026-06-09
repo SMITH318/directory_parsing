@@ -8,37 +8,43 @@ checks for duplicate rows and entry_ids.
 import pandas as pd
 from pathlib import Path
 import sys
-
 import argparse
+import logging
+logging.basicConfig(
+  handlers=[
+      logging.FileHandler('10_sort_entries.log', mode='w', encoding='utf-8'),
+      logging.StreamHandler(sys.stderr)
+  ],
+  level=logging.WARNING) ## <=================== Change logging level here
+logger = logging.getLogger(__name__)
 
 def sort_and_save(input_file, output_file, file_name):
     """Sort CSV by entry_id and save to output file. Check for duplicates."""
-    print(f"Processing {file_name}...")
+    logger.info(f"Processing {file_name}...")
     
     # Read the CSV file
     df = pd.read_csv(input_file)
-    print(f"  Loaded {len(df)} rows from {input_file.name}")
+    logger.info(f"  Loaded {len(df)} rows from {input_file.name}")
     
     # Check for duplicate entry_ids
     duplicates = df[df.duplicated(subset=['entry_id'], keep=False)].sort_values('entry_id')
     if len(duplicates) > 0:
         num_duplicate_ids = len(duplicates['entry_id'].unique())
-        print(f"  ⚠️  WARNING: Found {len(duplicates)} duplicate rows ({num_duplicate_ids} duplicate entry_ids)")
-        print(f"      Details:")
+        logger.warning(f"  ⚠️  WARNING: Found {len(duplicates)} duplicate rows ({num_duplicate_ids} duplicate entry_ids)")
+        logger.warning(f"      Details:")
         for dup_id in duplicates['entry_id'].unique():
             count = len(duplicates[duplicates['entry_id'] == dup_id])
-            print(f"        - {dup_id}: {count} occurrences")
+            logger.warning(f"        - {dup_id}: {count} occurrences")
     else:
-        print(f"  ✓ No duplicates found")
+        logger.info(f"  ✓ No duplicates found")
     
     # Sort by entry_id
     df_sorted = df.sort_values("entry_id").reset_index(drop=True)
-    print(f"  Sorted by entry_id")
+    logger.info(f"  Sorted by entry_id")
     
     # Save to output file
     df_sorted.to_csv(output_file, index=False)
-    print(f"  Saved to {output_file.name}")
-    print()
+    print(output_file)
 
 def main(dataset: str):
     # Define the data directory
@@ -57,8 +63,8 @@ def main(dataset: str):
     sort_and_save(city_input, city_output, "City Entries")
     sort_and_save(doc_input, doc_output, "Doc Entries")
 
-    print("✓ Done! Both files have been sorted and saved with '_sorted' postfix.")
-    print("✓ Step completed successfully")
+    logger.info("✓ Done! Both files have been sorted and saved with '_sorted' postfix.")
+    logger.info("✓ Step completed successfully")
     return 0
 
 if __name__ == "__main__":
@@ -68,4 +74,3 @@ if __name__ == "__main__":
     
     exit_code = main(args.dataset)
     sys.exit(exit_code)
-

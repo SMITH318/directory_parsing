@@ -23,9 +23,10 @@ from PIL import Image
 import logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(
-  filename='01_preprocessor.log', 
-  filemode='w', 
-  encoding='utf-8', 
+  handlers=[
+      logging.FileHandler('01_preprocessor.log', mode='w', encoding='utf-8'),
+      logging.StreamHandler(sys.stderr)
+  ],
   level=logging.WARNING) ## <=================== Change logging level here
 
 # 1. BYPASS PILLOW LIMIT
@@ -83,7 +84,7 @@ def detect_horizontal_rows(img_gray):
     h_norm = h_proj / (np.max(h_proj) + 1e-6)
     
     peaks = [y for y in range(1, len(h_norm)-1) if h_norm[y] > 0.1 and h_norm[y] > h_norm[y-1] and h_norm[y] > h_norm[y+1]]
-    print(f"\n\t\tDetected horizontal peaks at: {peaks}", end=" ")
+    logger.debug(f"Detected horizontal peaks at: {peaks}")
     clean_peaks = []
     min_col_h = h // 12
     if peaks:
@@ -182,7 +183,7 @@ def process_single_page(pdf_path, page_num, dpi=300):
         if images:
             return images[0]
     except Exception as e:
-        print(f"    Error loading page {page_num}: {e}")
+        logger.error(f"Error loading page {page_num}: {e}")
     return None
 
 
@@ -195,13 +196,9 @@ def main(dataset: str, pdf_dir: str = None, preprocessed_dir: str = None):
     output_base = Path(preprocessed_dir) if preprocessed_dir else project_root / "data" / dataset / "01_preprocessed"
     output_metadata = output_base / 'all_metadata.json'
     if output_base.exists() and output_metadata.exists():
-        print(f"Target directory and metadata.json for preprocessing exist ({output_base})")
-        user_input = input("(R)egenerate all images OR (s)kip and continue (R|s)?")
-        if user_input.startswith('s'):
-            return 0
-        if not user_input.startswith('R'):
-            logger.error(f"Unexpected response ({user_input}) to regeneration")
-            return 1
+        logger.warning(f"Skipping preprocessing: Target directory and metadata.json for preprocessing exist ({output_base})")
+        print(output_metadata)
+        return 0
     output_base.mkdir(parents=True, exist_ok=True)
 
     SAVE_DIAGNOSTIC_IMAGES = False
@@ -215,7 +212,6 @@ def main(dataset: str, pdf_dir: str = None, preprocessed_dir: str = None):
     EXPECTED_COLS = 3
 
     pdf_files = sorted(pdf_dir.glob("*.pdf"))
-    print(f"Found {len(pdf_files)} PDFs to process")
     logger.info(f"Found {len(pdf_files)} PDFs to process")
     
     all_metadata = []
@@ -224,13 +220,11 @@ def main(dataset: str, pdf_dir: str = None, preprocessed_dir: str = None):
         stem = pdf_path.stem
         pub_id = stem
 
-        print(f"\n[{pdf_idx+1}/{len(pdf_files)}] Processing: {stem}")
         logger.info(f"[{pdf_idx+1}/{len(pdf_files)}] Processing PDF: {stem}")
         
         # Get page count
         page_count = get_pdf_page_count(pdf_path)
-        print(f"  Detected {page_count} pages")
-        logger.debug(f"  Detected {page_count} pages")
+        logger.debug(f"Detected {page_count} pages")
 
         pdf_out_dir = output_base / stem
         pdf_out_dir.mkdir(parents=True, exist_ok=True)
@@ -241,15 +235,14 @@ def main(dataset: str, pdf_dir: str = None, preprocessed_dir: str = None):
         consecutive_failures = 0
         
         while consecutive_failures < 3:  # Stop after 3 consecutive failures (end of PDF)
-            print(f"  Processing page {page_num}...", end=" ", flush=True)
-            logger.debug(f"  Processing page {page_num}")
+            logger.debug(f"### Processing page {page_num} ###")
             
             # Load single page
             page_img = process_single_page(pdf_path, page_num, DPI)
             
             if page_img is None:
                 consecutive_failures += 1
-                print("(no page)")
+                logger.debug("### (no page) ###")
                 if page_num > page_count:
                     logger.debug(f"    Reached end of PDF at page {page_num}.")
                 else:
@@ -261,7 +254,6 @@ def main(dataset: str, pdf_dir: str = None, preprocessed_dir: str = None):
                         
             # Convert to grayscale
             img_gray = cv2.cvtColor(np.array(page_img), cv2.COLOR_RGB2GRAY)
-            print(f"({img_gray.shape[1]} by {img_gray.shape[0]})", end=" ")
             logger.debug(f"    Page {page_num} size: {img_gray.shape[1]}x{img_gray.shape[0]}")
 
             # Free the PIL image immediately
@@ -280,16 +272,13 @@ def main(dataset: str, pdf_dir: str = None, preprocessed_dir: str = None):
                 angle = skew_rect[2]
                 if DESCEW_PAGES and abs(angle) > 0.1: # only deskew if significant - do we want this??
                     img_gray = deskew_image(img_gray, angle)
-                    print(f"(deskewed {angle:.2f}°)", end=" ")
                     logger.debug(f"    Deskewed page {page_num} by {angle:.2f} degrees")
                 if CLIP_PAGES:
                     img_gray = clip_image_to_text(img_gray, skew_rect, padding=CLIP_PADDING)
-                    print("(clipped)", end=" ")
                     logger.debug(f"    Clipped page {page_num} to text area")
             
             # Detect rows
             h_bounds = detect_horizontal_rules(img_gray, OUTER_PIXELS_TO_IGNORE)
-            # print(f"\n\tFound horizontal rules at: {h_bounds}")
             logger.debug(f"    Detected horizontal bounds at: {h_bounds}")
 
             if page_num == 1 and len(h_bounds) > EXPECTED_ROWS:
@@ -303,7 +292,6 @@ def main(dataset: str, pdf_dir: str = None, preprocessed_dir: str = None):
 
             # TODO: consider looking for columns across entire page
             # v_page_bounds = detect_vertical_columns(img_gray)
-            # print(f"\tFound vertical rules at: {v_page_bounds}")
             # logger.debug(f"    Detected vertical bounds at page level: {v_page_bounds}")
 
             # Detect columns within each row and extract snippets
@@ -324,7 +312,6 @@ def main(dataset: str, pdf_dir: str = None, preprocessed_dir: str = None):
                     cv2.imwrite(str(row_path), row_strip, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
 
                 v_bounds = detect_vertical_columns(row_strip, OUTER_PIXELS_TO_IGNORE, row_path)
-                # print(f"\tIn row {r_idx}, found vertical rules at: {v_bounds}")
                 logger.debug(f"    In row {r_idx}, detected vertical bounds at: {v_bounds}")
                 if len(v_bounds) - 1 != EXPECTED_COLS:
                     logger.warning(f"    Expected {EXPECTED_COLS} columns, but found {len(v_bounds) - 1} in row {r_idx} of page {page_num} in {stem}")
@@ -352,8 +339,7 @@ def main(dataset: str, pdf_dir: str = None, preprocessed_dir: str = None):
                     })
             
             pdf_entry["pages"].append({"page_num": page_num, "snippets": page_snippets})
-            print(f"\t{len(page_snippets)} snippets")
-            logger.info(f"    Page {page_num} produced {len(page_snippets)} snippets")
+            logger.info(f"### Page {page_num} produced {len(page_snippets)} snippets ###")
             
             # Aggressive cleanup after each page
             del img_gray
@@ -363,8 +349,7 @@ def main(dataset: str, pdf_dir: str = None, preprocessed_dir: str = None):
             
             # Safety check - don't process more than 100 pages
             if page_num > 150:
-                print("  (reached 150 page limit)")
-                logger.error(f"    Reached 150 page limit for {stem}, stopping further processing.")
+                logger.error(f"Reached 150 page limit for {stem}, stopping further processing.")
                 break
 
         all_metadata.append(pdf_entry)
@@ -372,19 +357,17 @@ def main(dataset: str, pdf_dir: str = None, preprocessed_dir: str = None):
         # Save metadata incrementally (in case of crash)
         with open(output_base / "all_metadata.json", "w") as f:
             json.dump(all_metadata, f, indent=2)
-        print(f"  Saved metadata ({len(all_metadata)} PDFs processed)")
-        logger.info(f"  Saved metadata after processing {stem} ({len(all_metadata)} PDFs processed)")
+        logger.info(f"Saved metadata after processing {stem} ({len(all_metadata)} PDFs processed)")
 
-    print(f"\nDone! Processed {len(all_metadata)} PDFs")
     logger.info(f"Finished processing {len(all_metadata)} PDFs.")
-    print(f"📁 Output: {output_metadata}")
+    print(output_metadata)
     logger.info(f"Output metadata at {output_metadata}")
     
-    if len(all_metadata) > 0:
-        print("✓ Step completed successfully")
+    if len(all_metadata) == len(pdf_files):
+        logger.info("✓ Step completed successfully, metadata entries == PDFs")
         return 0
     else:
-        print("✗ Step failed: no PDFs processed")
+        logger.error(f"✗ Preprocessing step failed: {len(all_metadata)} processed but {len(pdf_files)} found")
         return 1
 
 

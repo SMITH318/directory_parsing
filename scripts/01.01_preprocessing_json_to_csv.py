@@ -6,6 +6,16 @@ import csv
 import sys
 from pathlib import Path
 import argparse
+import logging
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    handlers=[
+        logging.FileHandler('01.01_preprocessing_json_to_csv.log', mode='w', encoding='utf-8'),
+        logging.StreamHandler(sys.stderr)
+    ],
+    level=logging.WARNING
+)
 
 def main(dataset: str, preprocessed_dir: str = None):
     script_dir = Path(__file__).resolve().parent
@@ -45,8 +55,8 @@ def main(dataset: str, preprocessed_dir: str = None):
                         'y_offset': snippet['y_offset']
                     })
 
-    print(f"CSV file created successfully at {csv_path}")
-    print("✓ Step completed successfully")
+    print(csv_path)
+    logger.info("✓ Step completed successfully ({csv_path})")
     return 0
 
 if __name__ == "__main__":

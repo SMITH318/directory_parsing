@@ -17,12 +17,22 @@ import difflib
 sys.stdout.reconfigure(encoding='utf-8')
 
 import argparse
+import logging
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    handlers=[
+        logging.FileHandler('05_sanity_check.log', mode='w', encoding='utf-8'),
+        logging.StreamHandler(sys.stderr)
+    ],
+    level=logging.WARNING
+)
 
 TEXT_CHANGES = 0 # incremented in the compare_texts function for each change detected
 OCR_COLS = ["pub", "page", "col"]
 CLASSIFIED_COLS = ["publication", "page_number", "column"]
 
-def main(dataset: str):
+def main(dataset: str) -> int:
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent
     data_dir = project_root / "data" / dataset
@@ -60,29 +70,29 @@ def main(dataset: str):
                 affected_text_in = f"{affected_text_in:<{max_len}}"
                 affected_text_out = f"{affected_text_out:<{max_len}}"
 
-            print(f"    Change Type: {change_type}")
+            logger.warning(f"  Change Type: {change_type}")
             # Highlight changes using brackets and padded text
-            print(f"    text_in:  '{context_before_in}{{{{{affected_text_in}}}}}{context_after_in}'")
-            print(f"    text_out: '{context_before_out}{{{{{affected_text_out}}}}}{context_after_out}'")
-            print("--------------------------------------------------")
+            logger.warning(f"    text from OCR:             '{context_before_in}{{{{{affected_text_in}}}}}{context_after_in}'")
+            logger.warning(f"    text after classification: '{context_before_out}{{{{{affected_text_out}}}}}{context_after_out}'")
+            logger.warning("--------------------------------------------------")
     
     #Load OCR output JSONL file
     try:
         ocr_data = pd.read_json(ocr_path, lines=True)
     except Exception as e:
-        print(f"Error loading OCR output {ocr_path.name}: {str(e)}")
-        exit(1)
+        logger.error(f"Error loading OCR output {ocr_path.name}: {str(e)}")
+        return 1
 
     # Load classified entries CSV file
     try:
         classified_entries = pd.read_csv(classified_entries_path, encoding="utf-8")
     except Exception as e:
-        print(f"Error loading classified entries output {classified_entries_path.name}: {str(e)}")
-        exit(1)
+        logger.error(f"Error loading classified entries output {classified_entries_path.name}: {str(e)}")
+        return 1
 
-    print("\n" + "=" * 80)
-    print("SANITY CHECK REPORT - LINE GROUPING & CLASSIFICATION CONSISTENCY CHECKS")
-    print("-" * 80 + "\n")
+    logger.info("=" * 80)
+    logger.info("SANITY CHECK REPORT - LINE GROUPING & CLASSIFICATION CONSISTENCY CHECKS")
+    logger.info("-" * 80)
     any_errors = False
     any_warnings = False
 
@@ -90,8 +100,8 @@ def main(dataset: str):
     ocr_cols = ocr_data[OCR_COLS].drop_duplicates()
     classified_cols = classified_entries[CLASSIFIED_COLS].drop_duplicates()
     if len(ocr_cols) != len(classified_cols):
-        print(
-            f"\n❌  Inconsistent publication, column counts:",
+        logger.error(
+            f"❌  Inconsistent publication, column counts:",
             f"OCR has {len(ocr_cols)}, classified has {len(classified_cols)}"
         )
         any_errors = True
@@ -106,10 +116,10 @@ def main(dataset: str):
     if not unmatched_ocr_cols.empty:
         unmatched_ocr_cols.loc[unmatched_ocr_cols['_merge'] == "left_only", 'reason'] = "missing from classified"
         unmatched_ocr_cols.loc[unmatched_ocr_cols['_merge'] == "right_only", 'reason'] = "added in classified"
-        print(f"\n❌  OCR columns with no classified entries:\n{unmatched_ocr_cols.drop('_merge', axis=1)}\n")
+        logger.error(f"❌  OCR columns with no classified entries:\n{unmatched_ocr_cols.drop('_merge', axis=1)}\n")
         any_errors = True
     else:
-        print("✓ All OCR columns have classified entries")
+        logger.info("✓ All OCR columns have classified entries")
 
     # Check all text has been preserved in order (after removing whitespace and hyphens to deal with lines being collapsed)
     ocr_data = ocr_data.copy()
@@ -127,8 +137,8 @@ def main(dataset: str):
 
     matched_cols_text.apply(
         lambda row: (
-            print(
-                f"⚠ warning: text changed in {row['pub']}.{row['page']}.{row['col']}!",
+            logger.warning(
+                f"⚠ warning: text changed in {row['pub']}.{row['page']}.{row['col']}!"
                 f"(length in {len(row['ocr_text'])} vs. out {len(row['classified_text'])})"
             ),
             compare_texts(row["ocr_text"], row["classified_text"])
@@ -136,9 +146,9 @@ def main(dataset: str):
         axis=1
     )
     if TEXT_CHANGES == 0:
-        print("✓ All OCR text preserved in classified entries")
+        logger.info(f"✓ All OCR text preserved in classified entries")
     else:
-        print(f"⚠ {TEXT_CHANGES} text changes detected between OCR and classified entries")
+        logger.warning(f"⚠ {TEXT_CHANGES} text changes detected between OCR and classified entries")
         any_warnings = True
 
     # TODO: Check bounding boxes match grouped lines
@@ -153,20 +163,20 @@ def main(dataset: str):
         (type_counts_by_pub["entryType"] == "STATE") & (type_counts_by_pub["count"] != 1)
     ]
     if len(bad_state_counts) > 0:
-        print(f"\n❌ Unexpected number of state entries found:\n{bad_state_counts}\n")
+        logger.error(f"❌ Unexpected number of state entries found:\n{bad_state_counts}\n")
         any_errors = True
     else:
-        print("✓ All publications have exactly one STATE entry")
+        logger.info("✓ All publications have exactly one STATE entry")
 
     # Check that there are only a few, correct UNKNOWNs. 
     bad_unknown_counts = type_counts_by_pub[
         (type_counts_by_pub["entryType"] == "UNKNOWN") & (type_counts_by_pub["count"] > 0)
     ]
     if len(bad_unknown_counts) > 0:
-        print(f"\n❌ UNKNOWN entries found:\n{bad_unknown_counts}\n")
+        logger.error(f"❌ UNKNOWN entries found:\n{bad_unknown_counts}\n")
         any_errors = True
     else:
-        print("✓ No UNKNOWN entries found")
+        logger.info("✓ No UNKNOWN entries found")
 
     # Check the relative proportion of doc to city entries across publications
     city_doc_proportions_by_pub = classified_entries[
@@ -178,23 +188,27 @@ def main(dataset: str):
             (city_doc_proportions_by_pub["proportion"] < 0.69))
     ]
     if len(bad_doc_proportions_by_pub) > 0:
-        print(f"⚠ Unusually high or low proportions of docs to cities:\n{bad_doc_proportions_by_pub}\n")
+        logger.warning(f"⚠ Unusually high or low proportions of docs to cities:\n{bad_doc_proportions_by_pub}\n")
         any_warnings = True
     else:
-        print("✓ Proportions of doc to city entries look consistent across publications")
+        logger.info("✓ Proportions of doc to city entries look consistent across publications")
 
-
+    print(classified_entries_path)
     if not any_errors and not any_warnings:
-        print("✓ All checks passed!")
-
-    print("=" * 80 + "\n")
+        logger.info(f"✓ All checks passed! ({classified_entries_path})")
+    logger.info("=" * 80)
+    if not any_errors: # let manual review decide if warnings should stop process
+        if any_warnings:
+            logger.warning(f"Warnings during sanity check. Manually review them before continuing with step 8.")
+        return 0
+    return 1
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Step 5: Sanity Check Classified Entries")
     parser.add_argument("dataset", help="Name of the dataset")
     args = parser.parse_args()
     
-    main(args.dataset)
+    sys.exit(main(args.dataset))
 
 
 

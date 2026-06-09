@@ -11,6 +11,16 @@ from pathlib import Path
 import sys
 
 import argparse
+import logging
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    handlers=[
+        logging.FileHandler('08_split_parsed_entries.log', mode='w', encoding='utf-8'),
+        logging.StreamHandler(sys.stderr)
+    ],
+    level=logging.WARNING
+)
 
 def pub_to_id(pub:str) -> str:
     return pub.replace("New ", "N").replace("North ", "N").replace("South ", "S").replace("West ", "W")[:4]
@@ -50,7 +60,7 @@ def main(dataset: str, pdf_dir: str = None, preprocessed_dir: str = None):
             docs_list.append(row)
         else:
             # UNKNOWN or unknown type
-            print(f"** Unexpected entry type '{row['entryType']}' Ignoring!! **")
+            logger.warning(f"** Unexpected entry type '{row['entryType']}' Ignoring!! **")
 
     cities_df = pd.DataFrame(cities_list)
     docs_df = pd.DataFrame(docs_list)
@@ -58,11 +68,13 @@ def main(dataset: str, pdf_dir: str = None, preprocessed_dir: str = None):
     cities_df.to_csv(cities_file, encoding="utf-8", index=False)
     docs_df.to_csv(docs_file, encoding="utf-8", index=False)
     
+    print(cities_file)
+    print(docs_file)
     if len(docs_df) > 0 and len(cities_df) > 0:
-        print("✓ Step completed successfully")
+        logger.info(f"✓ Step completed successfully ({cities_file}; {docs_file})")
         return 0
     else:
-        print("✗ Step failed: not enough entries were split")
+        logger.error("✗ Step failed: not enough entries were split")
         return 1
 
 if __name__ == "__main__":
