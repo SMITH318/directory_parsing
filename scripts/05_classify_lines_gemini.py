@@ -6,7 +6,6 @@ Step 5: Group and classify OCR lines into entries
 - Saves segmented entries to CSV with metadata and aggregate bounding boxes.
 """
 
-from google.genai import errors
 from typing import Literal
 import sys
 from _AStepConfiguration import *
@@ -24,44 +23,34 @@ logging.basicConfig(
 INITIAL_WAIT_SECONDS = 60 * 5 # 5 minutes
 FOLLOWUP_WAIT_SECONDS = 60 * 1 # 1 minute
 MODEL_NAME ='gemini-flash-latest'
-MODEL_PROMPT = (
-    "Combine these ordered lines of text from a directory into entries, "
-    "leaving ALL of the characters in their UTF-8 format. "
-    "PRESERVE ALL of these characters: ▼, ⊕, ◊, ★, †, ♁, and ‡. "
-    "Each line may be a complete entry or part of a multi-line entry. " 
-    "Entries are contained within a single column of a page and publication. "
-    "Entries can be: (1) names of states or provinces; " 
-    "(2) cities with their county and often with their population; or "
-    "(3) doctors including a wide range of informatiom about them "
-    "and their careers, including their birth year, education, address, " 
-    "office address, any specialty, among others. "
-    "For each line of text, I'm providing the name of the publication, "
-    "the page number, the column number, "
-    "the text, a confidence value (0 to 1), and a bounding box " 
-    "represented by an x and y coordinate, a height, and a width. "
-    "Return ONLY a JSON array of the combined entries, including the source "
-    "information (publication, page number, and column number), " 
-    "what kind of entry it is (STATE, CITY, DOC, or UNKNOWN), "
-    "the combined lines of text, and the combined bounding box for the lines "
-    "specified by an x and y coordinate, a height, and a width. " 
-    "When combining lines, remove hyphens or dashes at end of lines for words broken "
-    "across lines, and combine the full word."
-    "Maintain the UTF-8 character encoding, retaining ALL characters as they are. "
-)
 
-class ClassifiedLine(BaseModel):
-    publication: str
-    page_number: int
-    column: int
-    entryType: Literal["STATE", "CITY", "DOC", "UNKNOWN"]
-    full_text: str
-    x: int
-    y: int
-    width: int
-    height: int
+def get_classified_models(schema_path: Path):
+    with open(schema_path, 'r', encoding='utf-8') as f:
+        schema_data = json.load(f)
+    types = list(schema_data.get('properties', {}).keys()) + ["UNKNOWN"]
+    prompt = schema_data['x-classify-prompt']
 
-class ClassifiedEntries(BaseModel):
-    entries: list[ClassifiedLine]
+    EntryTypeEnum = Literal[tuple(types)]
+
+    ClassifiedLineDynamic = create_model(
+        'ClassifiedLine',
+        publication=(str, ...),
+        page_number=(int, ...),
+        column=(int, ...),
+        entryType=(EntryTypeEnum, ...),
+        full_text=(str, ...),
+        x=(int, ...),
+        y=(int, ...),
+        width=(int, ...),
+        height=(int, ...)
+    )
+
+    ClassifiedEntriesDynamic = create_model(
+        'ClassifiedEntries',
+        entries=(list[ClassifiedLineDynamic], ...)
+    )
+
+    return prompt, ClassifiedLineDynamic, ClassifiedEntriesDynamic
 
 class ClassifyLinesStep(AStepConfiguration):
     # abstract
@@ -148,13 +137,14 @@ class ClassifyLinesStep(AStepConfiguration):
             writer.writeheader()
 
 
-def create_batch_processor():
+def create_batch_processor(schema_path: Path):
+    prompt, ClassifiedLineDynamic, ClassifiedEntriesDynamic = get_classified_models(schema_path)
     step_config = ClassifyLinesStep(
         MODEL_NAME, 
-        MODEL_PROMPT, 
+        prompt, 
         "entry", 
-        ClassifiedLine, 
-        ClassifiedEntries, 
+        ClassifiedLineDynamic, 
+        ClassifiedEntriesDynamic, 
     )
     return BatchProcessor(
         step_config,
@@ -166,7 +156,7 @@ def create_batch_processor():
         followup_wait_seconds=FOLLOWUP_WAIT_SECONDS, # 1 minute
     )
 
-def main(dataset: str):
+def main(dataset: str, config: Path) -> int:
     # 1. Setup Project Paths
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent
@@ -183,7 +173,7 @@ def main(dataset: str):
         try:
             logger.warning(f"*** Iteration {i} ***")
             if not batch_processor:
-                batch_processor = create_batch_processor()
+                batch_processor = create_batch_processor(config)
             if batch_processor.batch_prompt(
                 input_file,
                 output_dir,
@@ -225,9 +215,10 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Step 5: Group and classify OCR lines into entries")
     parser.add_argument("dataset", help="Name of the dataset")
+    parser.add_argument("--config", help="Path to JSON schema config with embedded prompts", required=True)
     args = parser.parse_args()
     
-    exit_code = main(args.dataset)
+    exit_code = main(args.dataset, args.config)
     sys.exit(exit_code)
 
 

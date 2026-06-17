@@ -195,7 +195,7 @@ def main(dataset: str) -> int:
 
     print(classified_entries_path)
     if not any_errors and not any_warnings:
-        logger.info(f"✓ All checks passed! ({classified_entries_path})")
+        logger.warning(f"✓ All checks passed! ({classified_entries_path})")
     logger.info("=" * 80)
     if not any_errors: # let manual review decide if warnings should stop process
         if any_warnings:

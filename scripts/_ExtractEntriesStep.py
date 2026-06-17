@@ -56,7 +56,7 @@ class ExtractEntriesStep(AStepConfiguration):
         with open(output_file, 'a', encoding='utf-8', newline='') as f_out:
             entry_writer = csv.DictWriter(f_out, self.entry_type.model_fields.keys(), restval="")
             for e in entries:
-                # print(e)
+                logger.debug(e)
                 entry_writer.writerow(e)
         return True
     

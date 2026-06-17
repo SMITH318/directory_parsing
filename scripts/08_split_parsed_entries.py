@@ -9,7 +9,7 @@ doctor entries following a city entry are assigned that city ID.
 import pandas as pd
 from pathlib import Path
 import sys
-
+import json
 import argparse
 import logging
 
@@ -25,15 +25,44 @@ logging.basicConfig(
 def pub_to_id(pub:str) -> str:
     return pub.replace("New ", "N").replace("North ", "N").replace("South ", "S").replace("West ", "W")[:4]
 
-def main(dataset: str, pdf_dir: str = None, preprocessed_dir: str = None):
+def get_inheritance_rules(config: Path):
+    if not config:
+        return {}
+    with open(config, 'r', encoding='utf-8') as f:
+        schema_data = json.load(f)
+    
+    rules = {} # {child_type: [(parent_type, child_field)]}
+    definitions = schema_data.get('definitions', {})
+    
+    properties = schema_data.get('properties', {})
+    for entity_name, prop_info in properties.items():
+        items_ref = prop_info.get('items', {}).get('$ref', '')
+        if items_ref:
+            def_name = items_ref.split('/')[-1]
+            definition = definitions.get(def_name, {})
+        else:
+            definition = prop_info.get('items', {})
+            
+        entity_rules = []
+        for prop_name, prop_details in definition.get('properties', {}).items():
+            if 'x-inherits-id-from' in prop_details:
+                parent_type = prop_details['x-inherits-id-from']
+                entity_rules.append((parent_type, prop_name))
+        
+        if entity_rules:
+            rules[entity_name] = entity_rules
+            
+    return rules
+
+def main(dataset: str, config: Path):
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent
 
     # Set up file paths
     data_dir = project_root / "data" / dataset 
     input_file = data_dir / "07_entries_segmented_man_cleaned.csv"
-    docs_file = data_dir / "08_doc_entries.csv" 
-    cities_file = data_dir / "08_city_entries.csv"
+    completion_file = data_dir / "08_split_complete.txt"
+    completion_file.unlink(missing_ok=True)
 
     combined_df = pd.read_csv(input_file, encoding="utf-8")
 
@@ -42,47 +71,59 @@ def main(dataset: str, pdf_dir: str = None, preprocessed_dir: str = None):
             f'{pub_to_id(row["publication"])}_{row["page_number"]:03d}_{row["column"]:02d}_{row.name:06d}',
         axis = 1
     )
+    combined_df.to_csv(data_dir / "08_combined_entries_IDed.csv", encoding="utf-8", index=False)
 
-    cities_list = []
-    docs_list = []
+    # get inheritance rules from schema if config is provided
+    inheritance_rules = get_inheritance_rules(config)
 
-    currentState = None
-    currentCityId = None
+    # dynamically group by entryType; keep track of previous ids by type
+    output_dfs = {entry_type: [] for entry_type in combined_df["entryType"].unique() if entry_type != "UNKNOWN"}
+    last_seen_id = {} # {entryType: entry_id}
+
     for i, row in combined_df.iterrows():
-        if row["entryType"] == "STATE":
-            currentState = row["full_text"]
-        elif row["entryType"] == "CITY":
-            row["state_name"] = currentState
-            currentCityId = row["entry_id"]
-            cities_list.append(row)
-        elif row["entryType"] == "DOC":
-            row["city_id"] = currentCityId
-            docs_list.append(row)
+        entry_type = row["entryType"]
+        if entry_type in output_dfs:
+            # track this entry's id
+            last_seen_id[entry_type] = row["entry_id"]
+            
+            # apply inheritance rules
+            if entry_type in inheritance_rules:
+                for parent_type, child_field in inheritance_rules[entry_type]:
+                    row[child_field] = last_seen_id.get(parent_type)
+                    
+            output_dfs[entry_type].append(row)
         else:
             # UNKNOWN or unknown type
-            logger.warning(f"** Unexpected entry type '{row['entryType']}' Ignoring!! **")
+            logger.warning(f"** Unexpected entry type '{entry_type}' Ignoring!! **")
 
-    cities_df = pd.DataFrame(cities_list)
-    docs_df = pd.DataFrame(docs_list)
+    # save each kind of entry into its own CSV
+    output_files = []
+    for entry_type, lst in output_dfs.items():
+        if lst:
+            df = pd.DataFrame(lst)
+            file_name = data_dir / f"08_{entry_type.lower()}_entries.csv"
+            df.to_csv(file_name, encoding="utf-8", index=False)
+            output_files.append(file_name)
+            print(file_name)
+            
+    # create a completion marker file for the pipeline
+    with open(completion_file, "w") as f:
+        f.write("complete\n")
 
-    cities_df.to_csv(cities_file, encoding="utf-8", index=False)
-    docs_df.to_csv(docs_file, encoding="utf-8", index=False)
-    
-    print(cities_file)
-    print(docs_file)
-    if len(docs_df) > 0 and len(cities_df) > 0:
-        logger.info(f"✓ Step completed successfully ({cities_file}; {docs_file})")
+    if len(output_files) > 0:
+        logger.info(f"✓ Step completed successfully ({len(output_files)} files created)")
         return 0
     else:
         logger.error("✗ Step failed: not enough entries were split")
         return 1
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Step 8: Split Parsed Entries")
+    parser = argparse.ArgumentParser(description="Step 8: Split Parsed Entries according to JSON schema")
     parser.add_argument("dataset", help="Name of the dataset")
+    parser.add_argument("--config", help="Path to JSON schema config", required=True)
     args = parser.parse_args()
     
-    exit_code = main(args.dataset)
+    exit_code = main(args.dataset, args.config)
     sys.exit(exit_code)
 
 

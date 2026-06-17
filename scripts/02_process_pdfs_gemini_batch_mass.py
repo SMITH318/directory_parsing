@@ -17,12 +17,13 @@ from _BatchProcessor import *
 
 import logging
 logger = logging.getLogger(__name__)
-logging.basicConfig(
-  handlers=[
-      logging.FileHandler('02_gemini_batch_mass.log', mode='w', encoding='utf-8'),
-      logging.StreamHandler(sys.stderr)
-  ],
-  level=logging.WARNING) ## <=================== Change logging level here
+fh = logging.FileHandler('02_gemini_batch_mass.log', mode='w', encoding='utf-8')
+fh.setFormatter(logging.BASIC_FORMAT)
+logger.addHandler(fh)
+sh = logging.StreamHandler(sys.stderr)
+sh.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+logger.addHandler(sh)
+logger.setLevel(logging.WARNING) ## <=================== Change logging level here
 
 
 class OCRLine(BaseModel):
@@ -40,7 +41,7 @@ class OCRResult(BaseModel):
 SKIP_TEXT = "******* KEEPS FAILING! SKIPPING FOR NOW *******"
 INITIAL_WAIT_SECONDS = 60 * 8 # 8 minutes
 FOLLOWUP_WAIT_SECONDS = 60 * 1 # 1 minute
-MAX_ITERATIONS = 1 # 1000
+MAX_ITERATIONS = 10
 MAX_BATCHES_AT_ONCE = 100
 MODEL_NAME ='gemini-flash-latest' # gemini-3-flash-preview <- is what this has been in 2/2026
 MODEL_PROMPT = (

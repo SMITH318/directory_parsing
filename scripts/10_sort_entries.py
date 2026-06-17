@@ -6,6 +6,7 @@ checks for duplicate rows and entry_ids.
 """
 
 import pandas as pd
+import json
 from pathlib import Path
 import sys
 import argparse
@@ -46,31 +47,44 @@ def sort_and_save(input_file, output_file, file_name):
     df_sorted.to_csv(output_file, index=False)
     print(output_file)
 
-def main(dataset: str):
+def main(dataset: str, config_path: str):
     # Define the data directory
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent
     data_dir = project_root / "data" / dataset
-    
-    # Define input and output file paths
-    city_input = data_dir / "09_city_entries_parsed.csv"
-    doc_input = data_dir / "09_doc_entries_parsed.csv"
-    
-    city_output = data_dir / "10_city_entries_sorted.csv"
-    doc_output = data_dir / "10_doc_entries_sorted.csv"
 
-    # Process both files
-    sort_and_save(city_input, city_output, "City Entries")
-    sort_and_save(doc_input, doc_output, "Doc Entries")
+    # Load JSON schema config
+    config_file = Path(config_path)
+    if not config_file.exists():
+        logger.error(f"❌ Error: Config file not found at {config_file}")
+        return 1
+        
+    try:
+        with open(config_file, 'r', encoding='utf-8') as f:
+            schema = json.load(f)
+    except Exception as e:
+        logger.error(f"❌ Error loading JSON config file: {e}")
+        return 1
 
-    logger.info("✓ Done! Both files have been sorted and saved with '_sorted' postfix.")
+    entities = schema.get('properties', {})
+    for entity, entity_info in entities.items():
+        # Define input and output file paths
+        input_file = data_dir / f"09_{entity.lower()}_parsed.csv"
+        output_file = data_dir / f"10_{entity.lower()}_entries_sorted.csv"
+        
+        # Process the file
+        sort_and_save(input_file, output_file, f"{entity} Entries")
+    
+
+    logger.info("✓ Done! All files have been sorted and saved with '_sorted' postfix.")
     logger.info("✓ Step completed successfully")
     return 0
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Step 10: Sort CSV parsed entry files")
     parser.add_argument("dataset", help="Name of the dataset")
+    parser.add_argument("--config", help="Path to JSON schema config file", required=True)
     args = parser.parse_args()
     
-    exit_code = main(args.dataset)
+    exit_code = main(args.dataset, args.config)
     sys.exit(exit_code)

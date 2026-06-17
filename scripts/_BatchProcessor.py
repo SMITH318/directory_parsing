@@ -1,5 +1,4 @@
 from collections.abc import Generator
-from abc import ABC, abstractmethod
 from pydantic import ValidationError
 import datetime
 import json
@@ -11,7 +10,6 @@ from google.genai import types
 from google.genai import errors
 import time
 import pandas as pd
-import csv
 import logging
 from _clean_gemini import *
 from _AStepConfiguration import AStepConfiguration
@@ -333,7 +331,7 @@ class BatchProcessor:
             if finish_reason != "STOP":
                 successful = False
                 self.logger.error(f"Unexpected finishReason ({content_response.model_version}): {finish_reason} in {display_name}")
-                logger.debug(json.dumps(content_response, indent=2))
+                self.logger.debug(json.dumps(content_response, indent=2))
                 if finish_reason == "MAX_TOKENS":
                     self.logger.warning(f"Total tokens used: {content_response.usage_metadata.total_token_count}")
                     self.create_batch_request(
