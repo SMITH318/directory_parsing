@@ -85,9 +85,8 @@ class OCRStep(AStepConfiguration):
         # find offsets for this snippet
         # offset_row = offsets_file_df[offsets_file_df['key'] == display_name].iloc[0]
         
-        lines_received_txt = f"received {len(gemini_output)} {self.entry_type_name}s at {datetime.datetime.now()}"
+        lines_received_txt = f"received {len(gemini_output)} {self.entry_type_name}s (job: {display_name}) at {datetime.datetime.now()}"
         logger.info(lines_received_txt)
-        print("\t", lines_received_txt)
 
         # 4. Save 
         with open(output_file, 'a', encoding='utf-8') as f_out:

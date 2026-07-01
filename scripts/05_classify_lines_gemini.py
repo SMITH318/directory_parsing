@@ -117,10 +117,8 @@ class ClassifyLinesStep(AStepConfiguration):
         if not isinstance(entries, list):
             raise ValueError(f"Response to {display_name} is not a JSON array")
 
-        
-        lines_received_txt = f"received {len(entries)} entries at {datetime.datetime.now()}"
-        logger.info(lines_received_txt)
-
+        logger.info(f"received {len(entries)} entries at {datetime.datetime.now()}")
+        num_unknown = 0
         # 4. Save 
         with open(output_file, 'a', encoding='utf-8', newline='') as f_out:
             writer = csv.DictWriter(f_out, self.entry_type.model_fields.keys())
@@ -128,6 +126,7 @@ class ClassifyLinesStep(AStepConfiguration):
                 if entry["entryType"] == "UNKNOWN":
                     num_unknown += 1
                 writer.writerow(entry)
+        logger.info(f"{num_unknown} line entries had type UNKNOWN")
         return successful
     
     # abstract

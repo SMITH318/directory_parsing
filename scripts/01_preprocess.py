@@ -187,12 +187,13 @@ def process_single_page(pdf_path, page_num, dpi=300):
     return None
 
 
-def main(dataset: str, pdf_dir: str = None, preprocessed_dir: str = None):
+def main(dataset: str, pdf_dir: str|None = None, preprocessed_dir: str|None = None):
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent
 
     ################### Constant/paths start here ##########################
     pdf_dir = Path(pdf_dir) if pdf_dir else project_root / "pdfs" 
+    logger.info(f"Looking for PDFs in {pdf_dir}")
     output_base = Path(preprocessed_dir) if preprocessed_dir else project_root / "data" / dataset / "01_preprocessed"
     output_metadata = output_base / 'all_metadata.json'
     if output_base.exists() and output_metadata.exists():
@@ -212,7 +213,10 @@ def main(dataset: str, pdf_dir: str = None, preprocessed_dir: str = None):
     EXPECTED_COLS = 3
 
     pdf_files = sorted(pdf_dir.glob("*.pdf"))
-    logger.info(f"Found {len(pdf_files)} PDFs to process")
+    if len(pdf_files) == 0:
+        logger.warning(f"Found {len(pdf_files)} PDFs to process")
+    else:
+        logger.info(f"Found {len(pdf_files)} PDFs to process")
     
     all_metadata = []
 

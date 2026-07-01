@@ -135,7 +135,7 @@ def main(dataset: str, preprocessed_dir: str = None) -> int:
                 # Flag if any column differs by more than 8 from average
                 if max_deviation > 8:
                     logger.error(
-                        f"❌ {pub_id} page {page_num}: Column lines differ by more than 8: {max_deviation:.1f}",
+                        f"❌ {pub_id} page {page_num}: Column lines differ by more than 8: {max_deviation:.1f}"
                         f"(cols: {column_line_counts})"
                     )
                     any_errors = True

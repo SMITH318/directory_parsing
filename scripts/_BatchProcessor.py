@@ -205,7 +205,7 @@ class BatchProcessor:
                 request_key= "unknown"
                 try:
                     request_key, prep_content = self.step_config.prepare_for_request(current_df)
-                    self.logger.debug(f"Content for {request_key} request:")
+                    self.logger.info(f'"{request_key}" request')
                     self.logger.debug(prep_content)
                     if prompts_file:
                         # save prompt for tuning
