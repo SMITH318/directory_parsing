@@ -38,6 +38,7 @@ class BatchProcessor:
         self.followup_wait_seconds = followup_wait_seconds
         self.max_attempts_per_prompt = max_attempts_per_prompt
         self.make_next_request_gen = None
+        self.batches_needed = -1
 
         # Initialize Gemini
         api_key = os.getenv('GEMINI_API_KEY', 'YOUR_API_KEY')
@@ -69,6 +70,7 @@ class BatchProcessor:
             finished_files: list[Path]
         ) -> pd.DataFrame:
         data_in = self.step_config.load_input(file_in)
+        self.batches_needed = -(-len(data_in)//self.max_entries_per_batch)
         finished_data = [self.step_config.load_finished(file) for file in finished_files]
         finished_df = pd.concat(finished_data, ignore_index=True)
         if len(finished_df):
@@ -167,15 +169,20 @@ class BatchProcessor:
         jobs = []
         try:
             for _ in range(num_jobs):
-                job = next(self.make_next_request_gen)
+                entries_left, job = next(self.make_next_request_gen)
                 if job:
                     jobs.append(job)
         except StopIteration as e:
-            self.logger.info(f"All inputs processed: {e}")
+            self.logger.warning(f"All inputs processed: {e}")
+            entries_left = 0
 
         gc.collect()
         
-        self.logger.info(f"Total jobs prepared: {len(jobs)}")
+        self.logger.warning(
+            f"Total jobs prepared: {len(jobs)}; """
+            f"{-(-entries_left // self.max_entries_per_batch)} left out of "
+            f"{self.batches_needed} total batches"
+        )
         
         return jobs
     
@@ -183,7 +190,8 @@ class BatchProcessor:
             self,
             all_inputs: pd.DataFrame, 
             prompts_file: Path = None,
-        ) -> Generator[types.BatchJob, None, None]:
+        ) -> Generator[tuple[int, types.BatchJob], None, None]: 
+        """yields (entries_left, job)"""
         
         next_entry = 0
         while next_entry < len(all_inputs):
@@ -224,7 +232,7 @@ class BatchProcessor:
                     else:
                         job = self.create_batch_request(request_key, prep_content)
                         if job:
-                            yield job
+                            yield (len(all_inputs) - next_entry, job) # entries_left, job
                             break # attempt while
                    
                 except Exception as e:
