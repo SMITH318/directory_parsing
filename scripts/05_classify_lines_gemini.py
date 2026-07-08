@@ -22,7 +22,7 @@ logging.basicConfig(
 # ***************************** constants *****************************
 INITIAL_WAIT_SECONDS = 60 * 5 # 5 minutes
 FOLLOWUP_WAIT_SECONDS = 60 * 1 # 1 minute
-MODEL_NAME ='gemini-flash-latest'
+MODEL_NAME ="gemini-3-flash-preview"#'gemini-flash-latest'
 
 def get_classified_models(schema_path: Path):
     with open(schema_path, 'r', encoding='utf-8') as f:
@@ -125,6 +125,7 @@ class ClassifyLinesStep(AStepConfiguration):
             for entry in entries: 
                 if entry["entryType"] == "UNKNOWN":
                     num_unknown += 1
+                entry["full_text"] = entry["full_text"].replace("\n", " ")
                 writer.writerow(entry)
         logger.info(f"{num_unknown} line entries had type UNKNOWN")
         return successful
