@@ -90,6 +90,8 @@ def main(dataset: str, config: Path):
             if entry_type in inheritance_rules:
                 for parent_type, child_field in inheritance_rules[entry_type]:
                     row[child_field] = last_seen_id.get(parent_type)
+                    if row[child_field] == None:
+                        logger.warning(f"'{entry_type}' missing previous parent ({parent_type})")
                     
             output_dfs[entry_type].append(row)
         else:

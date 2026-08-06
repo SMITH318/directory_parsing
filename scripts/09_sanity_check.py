@@ -27,17 +27,16 @@ logging.basicConfig(
       logging.FileHandler('09_sanity_check.log', mode='w', encoding='utf-8'),
       logging.StreamHandler(sys.stderr)
   ],
-  level=logging.WARNING) ## <=================== Change logging level here
+  level=logging.INFO) ## <=================== Change logging level here
 
 # expects either both split out docs and cities (with IDs) or classified entries with no IDs
 START_SPLIT = True#False
 
-def check_missing_ids(df:pd.DataFrame, id_col: str) -> List[str]:
+def check_missing_ids(ids:pd.Series) -> List[str]:
     """
     Check for missing IDs (gaps in numeric sequences).
     Only works for numeric IDs or numeric suffixes.
     """
-    ids = df[id_col]# [id for id in df[id_col] if id]  # Filter empty IDs
     
     missing = []
     
@@ -174,11 +173,15 @@ def main(dataset: str, config_path: Path):
 
     parsed_docs_path = data_dir / "09_doc_parsed.csv"
     parsed_cities_path = data_dir / "09_city_parsed.csv"
-    if not (parsed_docs_path.exists() and parsed_cities_path.exists()):
-        logger.error(
-            f"❌ Error: only one step 9 output provided: "
-            f"{'docs' if parsed_cities_path else 'cities'} missing"
-        )
+    parsed_states_path = data_dir / "09_state_parsed.csv"
+    if not parsed_docs_path.exists():
+        logger.error("❌ Error: step 9 output docs missing")
+        sys.exit(1)
+    if not parsed_cities_path.exists():
+        logger.error("❌ Error: step 9 output cities missing")
+        sys.exit(1)
+    if not parsed_states_path.exists():
+        logger.error("❌ Error: step 9 output states missing")
         sys.exit(1)
 
     try:
@@ -194,6 +197,7 @@ def main(dataset: str, config_path: Path):
     try:
         parsed_docs = pd.read_csv(parsed_docs_path, encoding="utf-8")
         parsed_cities = pd.read_csv(parsed_cities_path, encoding="utf-8")
+        parsed_states = pd.read_csv(parsed_states_path, encoding="utf-8")
     except Exception as e:
         logger.error(f"Error loading parsed entries output: {str(e)}")
         sys.exit(1)
@@ -203,7 +207,7 @@ def main(dataset: str, config_path: Path):
     logger.info("-" * 80 + "\n")
 
     # Verify no repeated ids in parsed entries
-    all_ids = pd.concat([parsed_docs["entry_id"], parsed_cities["entry_id"]], ignore_index=True)
+    all_ids = pd.concat([parsed_docs["entry_id"], parsed_cities["entry_id"], parsed_states["entry_id"]], ignore_index=True)
     duplicated_ids = all_ids[all_ids.duplicated()]
     if not duplicated_ids.empty:
         logger.error(f"❌ Duplicate IDs found in parsed entries:\n{duplicated_ids.to_string()}")
@@ -213,14 +217,14 @@ def main(dataset: str, config_path: Path):
 
     # Verify no seqentially missing ids in parsed entries
     entry_counts = classified_entries["entryType"].value_counts()
-    missing = check_missing_ids(pd.concat([parsed_docs[['entry_id']], parsed_cities[['entry_id']]]), 'entry_id')
-    # STATE get IDs but aren't preserved, so expect that numnber to be missing
-    num_missing_expected = entry_counts.get("state", 0) if not START_SPLIT else classified_entries['state_id'].nunique()
-    if missing and num_missing_expected - 1!= len(missing):  # -1 for starting state with no ID
-        logger.error(f"❌ Missing {len(missing)} sequential ID numbers (expected {num_missing_expected - 1}): \n\t{missing}")
+    missing = check_missing_ids(all_ids)
+    # UNKNOWNs get IDs but aren't preserved, so expect that number to be missing (when we have it)
+    num_missing_expected = entry_counts.get("UNKNOWN", 0) if not START_SPLIT else 0
+    if len(missing) != num_missing_expected:
+        logger.error(f"❌ Missing {len(missing)} sequential ID numbers (expected {num_missing_expected}): \n\t{missing}")
         any_errors = True
     else:
-        logger.info(f"✓ No missing sequential IDs (outside of expected {num_missing_expected - 1})")
+        logger.info(f"✓ No missing sequential IDs (outside of expected {num_missing_expected})")
 
     # Verify parsed entries have same number of cities and docs as classified entries
     if entry_counts.get("doc", 0) != len(parsed_docs):
@@ -229,12 +233,12 @@ def main(dataset: str, config_path: Path):
             f"classified has {entry_counts.get('doc', 0)}, parsed has {len(parsed_docs)}"
         )
         any_errors = True
-        doc_in_entries = classified_entries[classified_entries["entryType"] == "DOC"]
+        doc_in_entries = classified_entries[classified_entries["entryType"].str.upper() == "DOC"]
         doc_in_counts = doc_in_entries.groupby(['publication', 'page_number', 'column'])['x'].count().reset_index(name='count')
         doc_out_counts = parsed_docs.groupby(['publication', 'page_number', 'column'])['x'].count().reset_index(name='count')
         doc_counts = doc_in_counts.merge(doc_out_counts, on = ['publication', 'page_number', 'column'], suffixes=['_in', '_out'], validate='1:1')
         doc_off_counts = doc_counts[doc_counts["count_in"] != doc_counts["count_out"]]
-        logger.error(doc_off_counts.to_string())
+        logger.error("\n" + doc_off_counts.to_string())
     else:
         logger.info("✓ Number of DOC entries matches")
 
@@ -256,7 +260,7 @@ def main(dataset: str, config_path: Path):
         missing_ids = classified_ids - parsed_doc_ids - parsed_city_ids
 
         if missing_ids:
-            logger.error(f"❌ Classify entry IDs ({len(missing_ids)}) not found in parsed docs:\n{missing_ids.to_string()}")
+            logger.error(f"❌ Classify entry IDs ({len(missing_ids)}) not found in parsed docs:\n{missing_ids}")
             any_errors = True
         else:
             logger.info("✓ All classified doc entry IDs are in parsed entries")
@@ -272,7 +276,7 @@ def main(dataset: str, config_path: Path):
         how="left", 
         # validate="1:m"
     )
-    missing_doc_refs = city_with_doc[city_with_doc["entry_id_y"].isna()]
+    missing_doc_refs = city_with_doc[city_with_doc["entry_id_y"].isna() & (city_with_doc["post_reference_type"].str.upper() != "SEE")]
     if not missing_doc_refs.empty:
         missing_doc_refs = missing_doc_refs.rename(columns={"entry_id_x": "city_entry_id"})
         logger.warning(
@@ -305,7 +309,7 @@ def main(dataset: str, config_path: Path):
     # Verify outputs match JSON config schema properties, enums, required fields, and types
     logger.info("=" * 80)
     logger.info("JSON SCHEMA VALIDATION CHECKS")
-    logger.info("-" * 80 + "\n")
+    logger.info("-" * 80)
     
     entities = schema.get('properties', {})
     for entity, entity_info in entities.items():
@@ -340,7 +344,7 @@ def main(dataset: str, config_path: Path):
             any_errors = True
             continue
             
-        logger.info(f"Validating {parsed_file_path.name} against schema properties...")
+        logger.info(f"***Validating {parsed_file_path.name} against schema properties...***")
         
         # Check columns
         expected_cols = set(properties_schema.get('properties', {}).keys())

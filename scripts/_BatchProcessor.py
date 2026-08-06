@@ -399,7 +399,7 @@ class BatchProcessor:
                 return True
 
             # 2. Initiate batch requests
-            self.logger.info(f"Initiating Batch {self.step_config.entry_type_name} requests (up to {self.max_batches_at_once})")
+            self.logger.warning(f"Initiating Batch {self.step_config.entry_type_name} requests (up to {self.max_batches_at_once})")
             
             self.make_next_request_gen = self.make_next_request(inputs, prompts_file)
             jobs = self.prepare_batch_requests(self.max_batches_at_once)

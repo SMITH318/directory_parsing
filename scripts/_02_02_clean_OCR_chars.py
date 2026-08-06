@@ -29,7 +29,7 @@ RE_MAP = {
     #replace multiple dashes and dash-like characters with single dash
     re.compile(r"[-–—━]"): "-",
     #replace any colons with semi-colons
-    re.compile(':'): ';',
+    # re.compile(':'): ';', # probably overkill with better OCR
     #replace commas and underscores with periods
     #text=re.sub('[,_]', '.', text)
     #cleanup '(l'89)' format - often 'l' appears as 'I' or '1', space not always there

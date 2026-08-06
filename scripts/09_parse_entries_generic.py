@@ -21,7 +21,7 @@ logging.basicConfig(
   ],
   level=logging.WARNING) ## <=================== Change logging level here
 
-INITIAL_WAIT_SECONDS = 60 * 8 # 8 minutes
+INITIAL_WAIT_SECONDS = 60 #* 5 # 5 minutes
 FOLLOWUP_WAIT_SECONDS = 60 * 1 # 1 minute
 MODEL_NAME ='gemini-3-flash-preview'
 
