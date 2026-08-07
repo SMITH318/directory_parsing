@@ -108,18 +108,30 @@ def extract_and_save_entries(snippets: pd.DataFrame, csv_in: Path, csv_out: Path
     return len(df)
 
 
-def main(dataset: str, target_num_docs=500):
+def main(count_entity: str, dataset: str, config_path: str, target_num=500):
     # Define the data directory
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent
     data_dir = project_root / "data" / dataset
-
     metadata_path = data_dir / '01_preprocessed' / 'all_metadata.json'
-    doc_csv = data_dir / 'sampled_entries_docs_output.csv'
-    city_csv = data_dir / 'sampled_entries_cities_output.csv'
+
+    # Load JSON schema config
+    config_file = Path(config_path)
+    with open(config_file, 'r', encoding='utf-8') as f:
+        schema = json.load(f)
+    
+    schema_entities = list(schema.get('properties', {}).keys())
+    paths = {
+        entity: (
+            data_dir / f"09_{entity.lower()}_parsed.csv", 
+            data_dir / f"sampled_entries_{entity.lower()}_output.csv"
+        )
+        for entity in schema_entities
+    }
 
     num_samples = 5 # starting value
-    docs_so_far = 0
+    num_so_far = 0
+    
     # Load and process
     metadata = load_metadata(metadata_path)
     
@@ -127,12 +139,12 @@ def main(dataset: str, target_num_docs=500):
     all_snippets = get_all_snippets(metadata)
     print(f"Total snippets found: {len(all_snippets)}")
     
-    while docs_so_far < target_num_docs:
+    while num_so_far < target_num:
         # remove already sampled columns
         remaining_snippets = all_snippets.copy()
-        if doc_csv.exists():
+        if paths[count_entity][1].exists():
             cols_to_match = ['publication', 'page_number', 'column']
-            doc_df = pd.read_csv(doc_csv)[cols_to_match].drop_duplicates()
+            doc_df = pd.read_csv(paths[count_entity][1])[cols_to_match].drop_duplicates()
             merged = remaining_snippets.merge(doc_df, on=cols_to_match, how='left', indicator=True)
             # Keep only rows from the 'left_only' source and drop the helper column
             remaining_snippets = merged[merged['_merge'] == 'left_only'].drop(columns='_merge')
@@ -145,18 +157,21 @@ def main(dataset: str, target_num_docs=500):
         # Print results
         print_snippets(sampled)
 
-        # If extraction mode, extract entries and save combined CSV
-        extract_and_save_entries(sampled, data_dir / "10_city_entries_sorted.csv", city_csv)
-        docs_so_far += extract_and_save_entries(sampled, data_dir / "10_doc_entries_sorted.csv", doc_csv)
-        if docs_so_far >= target_num_docs//2:
+        # extract entries and save
+        for entity, (entity_csv, entity_output_csv) in paths.items():
+            n_extracted = extract_and_save_entries(sampled, entity_csv, entity_output_csv)
+            if entity == count_entity:
+                num_so_far += n_extracted
+        if num_so_far >= target_num//2:
             num_samples = 1
-        print(f"Total docs extracted so far: {docs_so_far}")
+        print(f"Total {count_entity}s extracted so far: {num_so_far}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Pick random columns from all_metadata.json and their extract entries from CSVs.")
+    parser.add_argument("entity", help="Name of the entity to count extraction on (e.g., 'doc' or 'city')")
     parser.add_argument("dataset", help="Name of the dataset")
-    # parser.add_argument("--config", help="Path to JSON schema config file", required=True)
+    parser.add_argument("--config", help="Path to JSON schema config file", required=True)
     args = parser.parse_args()
     
-    exit_code = main(args.dataset)#, args.config)
+    exit_code = main(args.entity, args.dataset, args.config)
     sys.exit(exit_code)
