@@ -39,10 +39,50 @@ def main(dataset: str) -> int:
     
     ocr_path = data_dir / "04_ocr_output_cleaned.jsonl"
     classified_entries_path = data_dir / "05_entries_segmented.csv"
+    auto_agged_ocr_file = data_dir / "04.09_ocr_output_auto_agged.csv"
 
-    def compare_texts(text1, text2):
-        """Compare two texts and print out the differences with context."""
+    def strip_linebreak_diffs(text_in:list[str], text_out:list[str]) -> list[str]:
+        """Remove line(entry)breaks from text_in if they don't appear or are spaces in text_out"""
+        text1 = "\n".join(text_in)
+        text2 = "\n".join(text_out)
+        chars_to_ignore_at_EOL = ".,;: -\n\t"
         matcher = difflib.SequenceMatcher(None, text1, text2)
+        text_so_far = ""
+        for change_type, i1, i2, j1, j2 in matcher.get_opcodes():
+            affected_text_in = text1[i1:i2]
+            if change_type == 'delete':
+                if len(affected_text_in) > 1:
+                    if affected_text_in.startswith("-\n"):
+                        affected_text_in = affected_text_in[2:]
+                affected_text_in = affected_text_in.strip()
+            if change_type == 'replace':
+                if len(affected_text_in) > 1:
+                    if affected_text_in[0] in chars_to_ignore_at_EOL and affected_text_in[1] == "\n":
+                        affected_text_in = affected_text_in[2:]
+                if len(affected_text_in) > 1:
+                    if affected_text_in[-2] in chars_to_ignore_at_EOL and affected_text_in[-1] == "\n":
+                        affected_text_in = affected_text_in[:-2]
+                    elif affected_text_in[-1] in chars_to_ignore_at_EOL:
+                        affected_text_in = affected_text_in[:-1]
+                changed_to = text2[j1:j2]
+                if changed_to.replace(":",";").strip(chars_to_ignore_at_EOL) == affected_text_in.strip(chars_to_ignore_at_EOL):
+                    text_so_far += changed_to
+                    continue                
+            text_so_far += affected_text_in
+            
+        return text_so_far.splitlines()
+
+    def compare_texts(row)->bool:
+        """Compare two texts and print out the differences with context."""
+        text1 = row['ocr_text']
+        text2 = row['classified_text']
+        logger.warning(
+                f"⚠ warning: text changed in {row['pub']}.{row['page']}.{row['col']}!"
+                f"(length in {len(text1)} vs. out {len(text2)})"
+            )
+        ignore = lambda x: x in " \n"
+        matcher = difflib.SequenceMatcher(ignore, text1, text2.replace(":",";"))
+        texts_differ = False
 
         for change_type, i1, i2, j1, j2 in matcher.get_opcodes():
             if change_type == 'equal':
@@ -50,6 +90,7 @@ def main(dataset: str) -> int:
             
             global TEXT_CHANGES
             TEXT_CHANGES += 1
+            texts_differ = True
 
             affected_text_in = text1[i1:i2]
             affected_text_out = text2[j1:j2]
@@ -67,14 +108,15 @@ def main(dataset: str) -> int:
 
             # Pad the strings for consistent display
             if change_type != "delete":
-                affected_text_in = f"{affected_text_in:<{max_len}}"
-                affected_text_out = f"{affected_text_out:<{max_len}}"
+                affected_text_in = affected_text_in#f"{affected_text_in:<{max_len}}"
+                affected_text_out = affected_text_out#f"{affected_text_out:<{max_len}}"
 
             logger.warning(f"  Change Type: {change_type}")
             # Highlight changes using brackets and padded text
             logger.warning(f"    text from OCR:             '{context_before_in}{{{{{affected_text_in}}}}}{context_after_in}'")
             logger.warning(f"    text after classification: '{context_before_out}{{{{{affected_text_out}}}}}{context_after_out}'")
             logger.warning("--------------------------------------------------")
+        return texts_differ
     
     #Load OCR output JSONL file
     try:
@@ -86,6 +128,7 @@ def main(dataset: str) -> int:
     # Load classified entries CSV file
     try:
         classified_entries = pd.read_csv(classified_entries_path, encoding="utf-8")
+        classified_entries["entryType"] = classified_entries["entryType"].str.upper()
     except Exception as e:
         logger.error(f"Error loading classified entries output {classified_entries_path.name}: {str(e)}")
         return 1
@@ -101,7 +144,7 @@ def main(dataset: str) -> int:
     classified_cols = classified_entries[CLASSIFIED_COLS].drop_duplicates()
     if len(ocr_cols) != len(classified_cols):
         logger.error(
-            f"❌  Inconsistent publication, column counts:",
+            f"❌  Inconsistent publication, column counts:"
             f"OCR has {len(ocr_cols)}, classified has {len(classified_cols)}"
         )
         any_errors = True
@@ -122,12 +165,10 @@ def main(dataset: str) -> int:
         logger.info("✓ All OCR columns have classified entries")
 
     # Check all text has been preserved in order (after removing whitespace and hyphens to deal with lines being collapsed)
-    ocr_data = ocr_data.copy()
-    ocr_data['text'] = ocr_data['text'].str.replace(r"[\s-]", "", regex=True).str.strip()
-    ocr_cols_text = ocr_data.groupby(OCR_COLS)['text'].agg("".join).reset_index()
-    classified_entries = classified_entries.copy()
-    classified_entries['full_text'] = classified_entries['full_text'].str.replace(r"[\s-]", "", regex=True).str.strip()
-    classified_cols_text = classified_entries.groupby(CLASSIFIED_COLS)['full_text'].agg("".join).reset_index()
+    ocr_data['text'] = ocr_data['text'].str.strip()
+    ocr_cols_text = ocr_data.groupby(OCR_COLS)['text'].agg(list).reset_index()
+    classified_entries['full_text'] = classified_entries['full_text'].str.strip()
+    classified_cols_text = classified_entries.groupby(CLASSIFIED_COLS)['full_text'].agg(list).reset_index()
     matched_cols_text = ocr_cols_text.merge(
         classified_cols_text, 
         left_on=OCR_COLS, 
@@ -135,14 +176,21 @@ def main(dataset: str) -> int:
         how="inner"
     ).rename(columns={"text": "ocr_text", "full_text": "classified_text"})
 
-    matched_cols_text.apply(
+    matched_cols_text['ocr_text'] =  matched_cols_text.apply(
+        lambda row: strip_linebreak_diffs(row['ocr_text'], row['classified_text']),
+        axis = 1
+    )
+
+    matched_cols_text[OCR_COLS + ["ocr_text"]].to_csv(auto_agged_ocr_file, index=False, encoding='utf-8')
+
+    matched_cols_text['ocr_text'] = matched_cols_text['ocr_text'].str.join("\n")
+    matched_cols_text['classified_text'] = matched_cols_text['classified_text'].str.join("\n")
+
+    matched_cols_text["has_diffs"] = matched_cols_text.apply(
         lambda row: (
-            logger.warning(
-                f"⚠ warning: text changed in {row['pub']}.{row['page']}.{row['col']}!"
-                f"(length in {len(row['ocr_text'])} vs. out {len(row['classified_text'])})"
-            ),
-            compare_texts(row["ocr_text"], row["classified_text"])
-        ) if row["ocr_text"] != row["classified_text"] else None, 
+            row["ocr_text"] != row["classified_text"]
+            and compare_texts(row)
+        ),
         axis=1
     )
     if TEXT_CHANGES == 0:
@@ -152,6 +200,17 @@ def main(dataset: str) -> int:
         any_warnings = True
 
     # TODO: Check bounding boxes match grouped lines
+
+    # check there are between 50 and 60 states (b/c of territories, etc.)
+    # type_counts = classified_entries["entryType"].value_counts()
+    # state_count = type_counts.loc["STATE"]
+    # print(state_count)
+    # if state_count < 50 or state_count > 60:
+    #     logger.error(f"❌ Unexpected number of total state entries found: {state_count} (expected between 50 and 60)")
+    #     any_errors = True
+    # else:
+    #     logger.info(f"✓ Total number of state entries between 50 and 60: {state_count}")
+
 
     # Check each document has only one, starting state
     drop_num_phys = classified_entries[
@@ -163,7 +222,7 @@ def main(dataset: str) -> int:
         (type_counts_by_pub["entryType"] == "STATE") & (type_counts_by_pub["count"] != 1)
     ]
     if len(bad_state_counts) > 0:
-        logger.error(f"❌ Unexpected number of state entries found:\n{bad_state_counts}\n")
+        logger.error(f"❌ Unexpected number of state entries found per publication:\n{bad_state_counts}\n")
         any_errors = True
     else:
         logger.info("✓ All publications have exactly one STATE entry")
@@ -195,7 +254,7 @@ def main(dataset: str) -> int:
 
     print(classified_entries_path)
     if not any_errors and not any_warnings:
-        logger.info(f"✓ All checks passed! ({classified_entries_path})")
+        logger.warning(f"✓ All checks passed! ({classified_entries_path})")
     logger.info("=" * 80)
     if not any_errors: # let manual review decide if warnings should stop process
         if any_warnings:

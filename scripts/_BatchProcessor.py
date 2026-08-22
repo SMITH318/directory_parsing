@@ -1,5 +1,4 @@
 from collections.abc import Generator
-from abc import ABC, abstractmethod
 from pydantic import ValidationError
 import datetime
 import json
@@ -11,7 +10,6 @@ from google.genai import types
 from google.genai import errors
 import time
 import pandas as pd
-import csv
 import logging
 from _clean_gemini import *
 from _AStepConfiguration import AStepConfiguration
@@ -40,6 +38,7 @@ class BatchProcessor:
         self.followup_wait_seconds = followup_wait_seconds
         self.max_attempts_per_prompt = max_attempts_per_prompt
         self.make_next_request_gen = None
+        self.batches_needed = -1
 
         # Initialize Gemini
         api_key = os.getenv('GEMINI_API_KEY', 'YOUR_API_KEY')
@@ -71,6 +70,7 @@ class BatchProcessor:
             finished_files: list[Path]
         ) -> pd.DataFrame:
         data_in = self.step_config.load_input(file_in)
+        self.batches_needed = -(-len(data_in)//self.max_entries_per_batch)
         finished_data = [self.step_config.load_finished(file) for file in finished_files]
         finished_df = pd.concat(finished_data, ignore_index=True)
         if len(finished_df):
@@ -169,15 +169,20 @@ class BatchProcessor:
         jobs = []
         try:
             for _ in range(num_jobs):
-                job = next(self.make_next_request_gen)
+                entries_left, job = next(self.make_next_request_gen)
                 if job:
                     jobs.append(job)
         except StopIteration as e:
-            self.logger.info(f"All inputs processed: {e}")
+            self.logger.warning(f"All inputs processed: {e}")
+            entries_left = 0
 
         gc.collect()
         
-        self.logger.info(f"Total jobs prepared: {len(jobs)}")
+        self.logger.warning(
+            f"Total jobs prepared: {len(jobs)}; """
+            f"{-(-entries_left // self.max_entries_per_batch)} left out of "
+            f"{self.batches_needed} total batches"
+        )
         
         return jobs
     
@@ -185,7 +190,8 @@ class BatchProcessor:
             self,
             all_inputs: pd.DataFrame, 
             prompts_file: Path = None,
-        ) -> Generator[types.BatchJob, None, None]:
+        ) -> Generator[tuple[int, types.BatchJob], None, None]: 
+        """yields (entries_left, job)"""
         
         next_entry = 0
         while next_entry < len(all_inputs):
@@ -207,7 +213,7 @@ class BatchProcessor:
                 request_key= "unknown"
                 try:
                     request_key, prep_content = self.step_config.prepare_for_request(current_df)
-                    self.logger.debug(f"Content for {request_key} request:")
+                    self.logger.info(f'"{request_key}" request')
                     self.logger.debug(prep_content)
                     if prompts_file:
                         # save prompt for tuning
@@ -226,7 +232,7 @@ class BatchProcessor:
                     else:
                         job = self.create_batch_request(request_key, prep_content)
                         if job:
-                            yield job
+                            yield (len(all_inputs) - next_entry, job) # entries_left, job
                             break # attempt while
                    
                 except Exception as e:
@@ -333,7 +339,7 @@ class BatchProcessor:
             if finish_reason != "STOP":
                 successful = False
                 self.logger.error(f"Unexpected finishReason ({content_response.model_version}): {finish_reason} in {display_name}")
-                logger.debug(json.dumps(content_response, indent=2))
+                self.logger.debug(json.dumps(content_response, indent=2))
                 if finish_reason == "MAX_TOKENS":
                     self.logger.warning(f"Total tokens used: {content_response.usage_metadata.total_token_count}")
                     self.create_batch_request(
@@ -393,7 +399,7 @@ class BatchProcessor:
                 return True
 
             # 2. Initiate batch requests
-            self.logger.info(f"Initiating Batch {self.step_config.entry_type_name} requests (up to {self.max_batches_at_once})")
+            self.logger.warning(f"Initiating Batch {self.step_config.entry_type_name} requests (up to {self.max_batches_at_once})")
             
             self.make_next_request_gen = self.make_next_request(inputs, prompts_file)
             jobs = self.prepare_batch_requests(self.max_batches_at_once)

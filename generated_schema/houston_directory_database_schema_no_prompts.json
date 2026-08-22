@@ -1,0 +1,263 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HoustonDirectoryArchiveSchema",
+  "description": "A JSON Schema validating the parsed and structured outputs for the 1870-1901 Houston City and Professional Directories project. It defines validation constraints for the individuals.csv and organizations.csv tables.",
+  "type": "object",
+  "properties": {
+    "individuals": {
+      "type": "array",
+      "description": "A list of structured historical records representing individual residents, lodgers, partners, and workers.",
+      "items": {
+        "$ref": "#/definitions/IndividualRow"
+      }
+    },
+    "organizations": {
+      "type": "array",
+      "description": "A list of structured historical records representing businesses, civic organizations, religious bodies, and partnerships.",
+      "items": {
+        "$ref": "#/definitions/OrganizationRow"
+      }
+    }
+  },
+  "required": [
+    "individuals",
+    "organizations"
+  ],
+  "definitions": {
+    "IndividualRow": {
+      "type": "object",
+      "description": "Represents a single parsed line in the individuals CSV corresponding to an individual person.",
+      "properties": {
+        "entry_id": {
+          "type": "string",
+          "description": "Unique identifier generated for this record (e.g., IND_1892_0001).",
+          "pattern": "^IND_[0-9]{4}_[0-9]+$"
+        },
+        "source_directory": {
+          "type": "string",
+          "description": "The exact title of the physical directory source."
+        },
+        "directory_year": {
+          "type": "integer",
+          "description": "The starting publication or coverage year of the directory (e.g., 1892)."
+        },
+        "page_number": {
+          "type": "string",
+          "description": "The directory page number where this entry was transcribed from (string, to account for Roman numerals or suffixes like 92A)."
+        },
+        "raw_entry_text": {
+          "type": "string",
+          "description": "The literal, unaltered text segment extracted directly from the page image or raw OCR."
+        },
+        "surname": {
+          "type": "string",
+          "description": "Normalized surname of the individual in capital letters (e.g., HARMON)."
+        },
+        "given_names": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Normalized given names and initials (e.g., FREDERICK A.). Null if unspecified."
+        },
+        "prefix_honorific": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Social or professional prefixes such as Dr., Rev., Capt."
+        },
+        "suffix": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Generational suffixes such as Jr., Sr., III."
+        },
+        "civil_status_raw": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Unaltered status notes extracted from the text, indicating marital/domestic state (e.g., wid J. H., widow of James)."
+        },
+        "spouse_name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Normalized spouse name where domestic links are parsed."
+        },
+        "spouse_relationship_type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Standardized domestic link classifications.",
+          "enum": [
+            "widow_of",
+            "wife_of",
+            "husband_of",
+            "partner_of",
+            "null"
+          ]
+        },
+        "spouse_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Matching entry ID pointing to the spouse's individual record (if also present in the directory).",
+          "pattern": "^(IND_[0-9]{4}_[0-9]+)?$"
+        },
+        "occupation": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Unaltered transcription of the individual's listed trade, profession, or role."
+        },
+        "demographic_marker_raw": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The unaltered transcription of demographic, racial, or social symbols used next to the name (e.g., (c), col., *)."
+        },
+        "employer_name_raw": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Unaltered transcription of employer, firm, or institutional name."
+        },
+        "employer_organization_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Relational pointer to the matching record in organizations.csv.",
+          "pattern": "^(ORG_[0-9]{4}_[0-9]+)?$"
+        },
+        "role_title_raw": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Specific employment title or capacity within an employer firm (e.g., Treasurer, clerk)."
+        },
+        "residential_address_raw": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Literal address associated with residential keys (such as r. or res.)."
+        },
+        "boarding_address_raw": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Literal address associated with boarding terms (such as bds)."
+        },
+        "rooming_address_raw": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Literal address associated with rooming terms (such as rms)."
+        },
+        "living_address_raw": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Unaltered address string used where the residential structure is non-specific or general."
+        },
+        "business_address_raw": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Literal address of the workplace listed on this individual's row (such as Office 3101 Main)."
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "entry_id",
+        "source_directory",
+        "directory_year",
+        "page_number",
+        "raw_entry_text"
+      ]
+    },
+    "OrganizationRow": {
+      "type": "object",
+      "description": "Represents a single parsed line in the organizations CSV corresponding to a business, firm, or society.",
+      "properties": {
+        "organization_id": {
+          "type": "string",
+          "description": "Unique identifier generated for this organization (e.g., ORG_1892_0001).",
+          "pattern": "^ORG_[0-9]{4}_[0-9]+$"
+        },
+        "source_directory": {
+          "type": "string",
+          "description": "The exact title of the physical directory source."
+        },
+        "directory_year": {
+          "type": "integer",
+          "description": "The starting publication or coverage year of the directory."
+        },
+        "page_number": {
+          "type": "string",
+          "description": "The directory page number where this organization entry was transcribed."
+        },
+        "raw_entry_text": {
+          "type": "string",
+          "description": "The literal, unaltered text segment extracted directly from the page image or raw OCR."
+        },
+        "organization_name": {
+          "type": "string",
+          "description": "The transcribed and normalized name of the firm or institution (e.g., HOUSTON COLD STORAGE CO.)."
+        },
+        "business_type_industry": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Standardized category indices mapping the business's industry sector (e.g., restaurant, foundry)."
+        },
+        "business_address_raw": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Literal address of the physical operating site of the business."
+        },
+        "partners_raw": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The literal, unparsed parenthetical list of business owners, corporate officers, or partners."
+        },
+        "associated_individual_ids": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Semicolon-delimited array of unique individual IDs pointing to partner rows in individuals.csv (e.g., IND_1892_0941;IND_1892_0942)."
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "organization_id",
+        "source_directory",
+        "directory_year",
+        "page_number",
+        "raw_entry_text",
+        "organization_name"
+      ]
+    }
+  }
+}

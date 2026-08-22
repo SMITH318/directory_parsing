@@ -17,12 +17,13 @@ from _BatchProcessor import *
 
 import logging
 logger = logging.getLogger(__name__)
-logging.basicConfig(
-  handlers=[
-      logging.FileHandler('02_gemini_batch_mass.log', mode='w', encoding='utf-8'),
-      logging.StreamHandler(sys.stderr)
-  ],
-  level=logging.WARNING) ## <=================== Change logging level here
+fh = logging.FileHandler('02_gemini_batch_mass.log', mode='w', encoding='utf-8')
+fh.setFormatter(logging.Formatter(logging.BASIC_FORMAT))
+logger.addHandler(fh)
+sh = logging.StreamHandler(sys.stderr)
+sh.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+logger.addHandler(sh)
+logger.setLevel(logging.WARNING) ## <=================== Change logging level here
 
 
 class OCRLine(BaseModel):
@@ -40,10 +41,56 @@ class OCRResult(BaseModel):
 SKIP_TEXT = "******* KEEPS FAILING! SKIPPING FOR NOW *******"
 INITIAL_WAIT_SECONDS = 60 * 8 # 8 minutes
 FOLLOWUP_WAIT_SECONDS = 60 * 1 # 1 minute
-MAX_ITERATIONS = 1 # 1000
+MAX_ITERATIONS = 10
 MAX_BATCHES_AT_ONCE = 100
-MODEL_NAME ='gemini-flash-latest' # gemini-3-flash-preview <- is what this has been in 2/2026
-MODEL_PROMPT = (
+MODEL_NAME = "gemini-3-flash-preview" # <- was 'gemini-flash-latest' in 2/2026; latest became "gemini-3.5-flash"
+
+
+# MODEL_PROMPT = (
+#     "Your role is to perform OCR on the images you are prompted with. "
+#     "Extract all text from these images of columns from a medical directory. "
+#     "For each line of text, provide the text content, its bounding box coordinates "
+#     "in pixels, and a confidence score (between 0 and 1). "
+#     "Lines of text extend horizontally across the whole column. "
+#     "Return ONLY a JSON array with this exact format:\n"
+#     '[\n'
+#     '  {"text": "example text", "x": 10, "y": 20, "width": 100, "height": 15, "confidence": 0.95},\n'
+#     '  {"text": "wierd text; ṽ", "x": 10, "y": 30, "width": 90, "height": 19, "confidence": 0.50},\n'
+#     '  {"text": "more text", "x": 10, "y": 40, "width": 95, "height": 15, "confidence": 0.90}\n'
+#     ']\n'
+#     "Include all text, even small fragments. "
+#     "Coordinates should be exact, in pixels. "
+#     "Encode the bounding box in each line's x, y, width, and height fields. "
+#     "High confidence values close to 1 represent that that the text has been rendered correctly "
+#     "with little likelihood that the image contained different text. "
+#     "Lower confidence vales, as low as 0, represent uncertainty about what text the image contained. "
+#     "Include all symbols, punctuation, and line breaks, even if they look like noise. "
+#     "Encode special characters properly in JSON as UTF-8 characters, standardizing them across all images. "
+#     "For instance, there is a small dark cadeuceus at the end of some lines, occasionally followed by a G or N, encode that symbol as ▼. "
+#     "Places to expect ▼ include \"(l'08) ; ▼\", \"Prowell, James W. (b'73)-Mo.7,'96; (♁) ; ▼\", "
+#     "\"▼G\", \"'03; (l'03); 1444 N. 31st St.; U*; ▼G\", and \"Marx Bldg.; (A28); S*; ▼N\". "
+#     "Encode a sun cross or wheel cross that can appear between some right parentheses and dashes as ⊕. "
+#     "Places to expect ⊕ incude \"McCOLLUM, HERMAN E. (b'77)⊕-Mo.7,\", \"OLSON, EVALD (b'66)⊕-Kan.3,'07; (l'16)\", "
+#     "\"⊕-Mass.7,'06; Member Mass. Med. Soc.;\", and \"⊕-Pa.1,'00; (l'00); 491 E. State St.;\". "
+#     "Also, a diamond can appear after dashes and should be encoded as ◊. "
+#     "Places to expect ◊ include \"Bailey, Alexander Henry-◊; (l'89)\", "
+#     "\"Johnson, Granville Roswell (b 47) E-◊;\", and \"FREEMAN, JOHN F.-◊; 370 W. 10th St.;\". "
+#     "A triangle can appear after dashes and should be encoded as △, as in \"Veon, John E. (b'71)-△; (l 17); 2310 B.\" "
+#     "Stars can appear after one- or two-letter abbreviations and should be encoded as ★. "
+#     "Places to expect ★ include \"Bldg.; 2-4, 7-8; S★\", \"10-12, 3-5; I★\", "
+#     "\"Ridotto; 2-4; OALR★\", \"Op★\", and \"office, 314 W. 4th St.; (G1,3); R★\". "
+#     "† can appear in parentheses after an l, 1, or I, as in "
+#     "\"(l†)\", \"Harris, J. Monroe-◊; (l'†); not in practice\", "
+#     "\"Lindner, Carl W. (b'45)-O.9,'75; (l†); re-\", or \"'77, N.Y.5,'77; (1†) ; (A28) ; S\". "
+#     "♁ or ‡ can appear by themselves in parentheses, "
+#     "as in \"'89; (♁); S\", \"Stone, Robt. E.-Ga.5,'91; (♁); 648 Wood-\", "
+#     "\"Md.1,'82; (‡); 2927 St. Paul St.; 4-6\". or \"Murdock, Jos. L. (b'62)-Ga.10,'93; (‡)\". "
+#     "For punctuation like dashes, quotes, and apostrophes, use standard ASCII equivalents. "
+#     "Avoid encoding anything as non-ASCII characters beyond ▼, ⊕, ◊, ★, †, ♁, and ‡. "
+#     "Non-ASCII characters besides ▼, ⊕, ◊, ★, †, ♁, and ‡ decrease the confidence score. "
+# )
+
+MODEL_PROMPT = ( # 1921
     "Your role is to perform OCR on the images you are prompted with. "
     "Extract all text from these images of columns from a medical directory. "
     "For each line of text, provide the text content, its bounding box coordinates "
@@ -62,29 +109,58 @@ MODEL_PROMPT = (
     "with little likelihood that the image contained different text. "
     "Lower confidence vales, as low as 0, represent uncertainty about what text the image contained. "
     "Include all symbols, punctuation, and line breaks, even if they look like noise. "
-    "Encode special characters properly in JSON as UTF-8 characters, standardizing them across all images. "
-    "For instance, there is a small dark cadeuceus at the end of some lines, occasionally followed by a G or N, encode that symbol as ▼. "
-    "Places to expect ▼ include \"(l'08) ; ▼\", \"Prowell, James W. (b'73)-Mo.7,'96; (♁) ; ▼\", "
-    "\"▼G\", \"'03; (l'03); 1444 N. 31st St.; U*; ▼G\", and \"Marx Bldg.; (A28); S*; ▼N\". "
-    "Encode a sun cross or wheel cross that can appear between some right parentheses and dashes as ⊕. "
-    "Places to expect ⊕ incude \"McCOLLUM, HERMAN E. (b'77)⊕-Mo.7,\", \"OLSON, EVALD (b'66)⊕-Kan.3,'07; (l'16)\", "
-    "\"⊕-Mass.7,'06; Member Mass. Med. Soc.;\", and \"⊕-Pa.1,'00; (l'00); 491 E. State St.;\". "
-    "Also, a diamond can appear after dashes and should be encoded as ◊. "
-    "Places to expect ◊ include \"Bailey, Alexander Henry-◊; (l'89)\", "
-    "\"Johnson, Granville Roswell (b 47) E-◊;\", and \"FREEMAN, JOHN F.-◊; 370 W. 10th St.;\". "
-    "A triangle can appear after dashes and should be encoded as △, as in \"Veon, John E. (b'71)-△; (l 17); 2310 B.\" "
-    "Stars can appear after one- or two-letter abbreviations and should be encoded as ★. "
-    "Places to expect ★ include \"Bldg.; 2-4, 7-8; S★\", \"10-12, 3-5; I★\", "
-    "\"Ridotto; 2-4; OALR★\", \"Op★\", and \"office, 314 W. 4th St.; (G1,3); R★\". "
-    "† can appear in parentheses after an l, 1, or I, as in "
-    "\"(l†)\", \"Harris, J. Monroe-◊; (l'†); not in practice\", "
-    "\"Lindner, Carl W. (b'45)-O.9,'75; (l†); re-\", or \"'77, N.Y.5,'77; (1†) ; (A28) ; S\". "
-    "♁ or ‡ can appear by themselves in parentheses, "
-    "as in \"'89; (♁); S\", \"Stone, Robt. E.-Ga.5,'91; (♁); 648 Wood-\", "
-    "\"Md.1,'82; (‡); 2927 St. Paul St.; 4-6\". or \"Murdock, Jos. L. (b'62)-Ga.10,'93; (‡)\". "
+    "The only non-ASCII characters to expect and include in output text are ▼, ⊕, ◊, △, ★, †, ♁, and ‡. "
+    "Encode them properly in JSON as UTF-8 characters. Where to expect them is described below. "
     "For punctuation like dashes, quotes, and apostrophes, use standard ASCII equivalents. "
-    "Avoid encoding anything as non-ASCII characters beyond ▼, ⊕, ◊, ★, †, ♁, and ‡. "
-    "Non-ASCII characters besides ▼, ⊕, ◊, ★, †, ♁, and ‡ decrease the confidence score. "
+    "Characters besides letters, numbers, basic punctuation, ▼, ⊕, ◊, △, ★, †, ♁, and ‡ decrease the confidence score. "
+    "A small dark cadeuceus appears at the end of some lines, occasionally followed by a G or N, encode that symbol as ▼. "
+    "Encode a sun cross or wheel cross that can appear between some right parentheses and dashes as ⊕. "
+    "A diamond can appear after dashes and should be encoded as ◊. "
+    "A triangle can appear after dashes and should be encoded as △. "
+    "Stars can appear after one- or two-letter abbreviations and should be encoded as ★. "
+    "† can appear in parentheses after an l, 1, or I. "
+    "♁ or ‡ can appear by themselves in parentheses. "
+    "Here are examples of correct individual lines of text: \n"
+    "\"Fullilove, Robt. Elliott (col.), b'75; Tenn.7,\",\n"
+    "\"(l'08) ; ▼\",\n"
+    "\"Prowell, James W. (b'73)-Mo.7,'96; (♁) ; ▼\",\n"
+    "\"▼G\",\n"
+    "\"'03; (l'03); 1444 N. 31st St.; U*; ▼G\",\n"
+    "\"Marx Bldg.; (A28); S*; ▼N\",\n"
+    "\"McCOLLUM, HERMAN E. (b'77)⊕-Mo.7,\",\n"
+    "\"OLSON, EVALD (b'66)⊕-Kan.3,'07; (l'16)\",\n"
+    "\"⊕-Mass.7,'06; Member Mass. Med. Soc.;\",\n"
+    "\"⊕-Pa.1,'00; (l'00); 491 E. State St.;\",\n"
+    "\"Bailey, Alexander Henry-◊; (l'89)\",\n"
+    "\"Johnson, Granville Roswell (b 47) E-◊;\",\n"
+    "\"FREEMAN, JOHN F.-◊; 370 W. 10th St.;\",\n"
+    "\"Veon, John E. (b'71)-△; (l 17); 2310 B.\",\n"
+    "\"Bldg.; 2-4, 7-8; S★\",\n"
+    "\"10-12, 3-5; I★\",\n"
+    "\"Ridotto; 2-4; OALR★\",\n"
+    "\"Op★\",\n"
+    "office, 314 W. 4th St.; (G1,3); R★\",\n"
+    "\"(l†)\",\n"
+    "Harris, J. Monroe-◊; (l'†); not in practice\",\n"
+    "\"Lindner, Carl W. (b'45)-O.9,'75; (l†); re-\",\n"
+    "\"'77, N.Y.5,'77; (l†) ; (A28) ; S\",\n"
+    "\"'89; (♁); S\",\n"
+    "\"Stone, Robt. E.-Ga.5,'91; (♁); 648 Wood-\",\n"
+    "\"Md.1,'82; (‡); 2927 St. Paul St.; 4-6\",\n"
+    "\"ARNOUT, JOHN C., b'78; Neb.6,'07; ⊕;\",\n"
+    "\"'09; l'13; ⊕\",\n"
+    "\"l'07; ⊕ T\",\n"
+    "\"Miller, Lloyd T. (col.) ; Tenn.7,'93; l†\",\n"
+    "\"'17; ⊕ R; Member Ill. State Med. Soc\",\n"
+    "\"BRISCOE, Benj. E., b'77; Tenn.6,'01; (♁)\",\n"
+    "\"Arias, Enrique V., b'63; Mex.5,'10; l'19-\",\n"
+    "\"Hosey, Wm. Hillman, b'80; ◊; l'01\",\n"
+    "\"'87; l'86-R.D.1\",\n"
+    "\"l'13; ⊕ S-Crawford and Monroe St.;\",\n"
+    "\"Murdock, Jos. L. (b'62)-Ga.10,'93; (‡)\".\n"
+    "For punctuation like dashes, quotes, and apostrophes, use standard ASCII equivalents. "
+    "Avoid encoding anything as non-ASCII characters beyond ▼, ⊕, ◊, △, ★, †, ♁, and ‡. "
+    
 )
 
 def create_batch_processor():

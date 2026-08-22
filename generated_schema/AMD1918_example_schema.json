@@ -1,0 +1,284 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MedicalDirectorySchema",
+  "description": "Example JSON schema combining doc, city, and state parsing definitions with their prompts.",
+  "x-classify-prompt": "Combine these ordered lines of text from a directory into entries, leaving ALL of the characters in their UTF-8 format. PRESERVE ALL of these characters: ▼, ⊕, ◊, ★, †, ♁, and ‡. Each line may be a complete entry or part of a multi-line entry. Entries are contained within a single column of a page and publication. Entries can be: (1) names of states or provinces; (2) cities with their county, often with their population (a number or a dash), and sometimes continued on following lines with the number of doctors in a city or a parenthetical 'See' reference to another city; or (3) doctors including a wide range of informatiom about them and their careers, including their birth year, education, address, office address, any specialty, among others. For each line of text, I'm providing the name of the publication, the page number, the column number, the text, a confidence value (0 to 1), and a bounding box represented by an x and y coordinate, a height, and a width. Return ONLY a JSON array of the combined entries, including the source information (publication, page number, and column number), what kind of entry it is (STATE, CITY, DOC, or UNKNOWN), the combined lines of text, and the combined bounding box for the lines specified by an x and y coordinate, a height, and a width. When combining lines, remove hyphens or dashes at end of lines for words broken across lines, and combine the full word. Otherwise, retain ALL characters as they are, and maintain the UTF-8 character encoding.",
+  "type": "object",
+  "properties": {
+    "doc": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/DocEntry"
+      }
+    },
+    "city": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/CityEntry"
+      }
+    },
+    "state": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/StateEntry"
+      }
+    }
+  },
+  "definitions": {
+    "StateEntry": {
+      "type": "object",
+      "x-parse-prompt": "Parse these ordered entries from a directory, each line is a complete entry. Entries are names of states. For each entry, return ONLY one JSON array of state entries. Extract the name of the state.",
+      "properties": {
+        "publication": {
+          "type": "string"
+        },
+        "page_number": {
+          "type": "integer"
+        },
+        "column": {
+          "type": "integer"
+        },
+        "x": {
+          "type": "integer"
+        },
+        "y": {
+          "type": "integer"
+        },
+        "width": {
+          "type": "integer"
+        },
+        "height": {
+          "type": "integer"
+        },
+        "entry_id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "publication",
+        "page_number",
+        "column",
+        "x",
+        "y",
+        "width",
+        "height",
+        "entry_id",
+        "name"
+      ]
+    },
+    "CityEntry": {
+      "type": "object",
+      "x-parse-prompt": "Parse these ordered entries from a medical directory, each line is a complete entry. Entries are contained within a single column of a page and publication. Entries are cities with their county and often with their population. For each entry, I'm providing the name of the publication, the page number, the column number, the entry type, its text, an id, the name of the city's state, and a bounding box represented by an x and y coordinate, a height, and a width. Return ONLY one JSON array of the city entries with this exact format:\n[\n  {\"publication\": \"Alabama\", \"page_number\": 1, \"column\": 0, \"x\": 297, \"y\": 1622, \"width\": 686, \"height\": 41, \"entry_id\": \"Alab_001_00_00002\", \"state_name\": \"Alabama\", \"name\": \"City Name\", \"population\": 10000, \"county_name\": \"Dallas\", \"post_reference\": \"Oakville\", \"post_reference_type\": \"RD\"},\n  {\"publication\": \"Texas\", \"page_number\": 4, \"column\": 0, \"x\": 215, \"y\": 1263, \"width\": 760, \"height\": 63, \"entry_id\": \"Texa_004_00_00268\", \"state_name\": \"Texas\", \"name\": \"Dallas\", \"population\": 15600, \"county_name\": \"Harris\", \"post_reference\": \"\", \"post_reference_type\": \"\"}\n]\nYou are critical to the data entry pipeline. Your goal is to make no mistakes and accurately extract individual pieces of information from the text input.",
+      "properties": {
+        "publication": {
+          "type": "string"
+        },
+        "page_number": {
+          "type": "integer"
+        },
+        "column": {
+          "type": "integer"
+        },
+        "x": {
+          "type": "integer"
+        },
+        "y": {
+          "type": "integer"
+        },
+        "width": {
+          "type": "integer"
+        },
+        "height": {
+          "type": "integer"
+        },
+        "entry_id": {
+          "type": "string"
+        },
+        "state_id": {
+          "type": "string",
+          "x-inherits-id-from": "state"
+        },
+        "name": {
+          "type": "string"
+        },
+        "population": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "county_name": {
+          "type": "string"
+        },
+        "post_reference": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "post_reference_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "publication",
+        "page_number",
+        "column",
+        "x",
+        "y",
+        "width",
+        "height",
+        "entry_id",
+        "state_id",
+        "name"
+      ]
+    },
+    "DocEntry": {
+      "type": "object",
+      "x-parse-prompt": "Parse these ordered entries from a medical directory, each line is a complete entry. Entries are contained within a single column of a page and publication. Entries are doctors including a wide range of information about them and their careers, including their birth year, education, address, office address, any specialty, among others. For each entry, I'm providing the name of the publication, the page number, the column number, the entry type, its text, an entry id for the doctor, an id for the city where they live, and a bounding box represented by an x and y coordinate, a height, and a width. Return ONLY one JSON array of the doctor entries with this exact format:\n[\n  {\"publication\": \"Alabama\", \"page_number\": 1, \"column\": 0, \"x\": 297, \"y\": 1622, \"width\": 686, \"height\": 41, \"entry_id\": \"Alab_001_00_00002\", \"city_id\": \"Alab_001_00_00001\", \"name\": \"CLARK, JAMES THOMAS\", \"AMA_member\": \"True\", \"col\": \"False\", \"birth_year\": 76, \"AMA_fellow\": \"False\", \"schools\": \"Ala.4,'11\", \"license_year\": 11, \"not_in_practice\": \"False\", \"address\": \"\", \"office\": \"\", \"hours\": \"\", \"societies\": \"\", \"specialty\": \"\", \"military\": \"\", \"other_info\": \"\"}\n]\nFor every entry, keep existing information (including publication, page number, column number, entry id, city id, and its bounding box) and leave it unchanged. Ignore the entry type. Only use the full_text field to determine the values of the following fields. Doctor entries can include a number of different elements, but most have only the doctor's name, their medical school information (represented as a state abbreviation, an ID number, and a 2-digit graduation year or as ◊ or △ if the information is missing), and a 2-digit license year in parentheses after an l or I. If the license year is unknown, a t appears in place of a year; encode it as -2. A ♁ or ‡ can appear in parentheses, instead of licensing information; encode ♁ as -1 for the license year and ‡ as -3. Doctors listed as 'not in practice' usually have no license year, leave it blank. For most doctors, a 2-digit birth year in the format (b'YY) appears. Leave all years - birth years, license years, etc. - as 2 digits. ⊕ indicates the doctor is an AMA fellow, and their name in upper case (with the exception of punctuation and at most one lower-case letter) indicates AMA membership. Doctors' entries that include (col), (col.), or near variations - and only those entries - have a col value of \"True\". The col values for all other doctors is \"False\". Addresses can be street addresses, building names, P.O. boxes, or R.D. routes. P.O. and R.D. always indicate a type of address and are often followed by a name or number that is part of the address. Some doctors are members of societies, which are listed in parentheses and encoded as capital letters A-G followed by one- or two-digit numbers. Specialties are short abbreviations that can be followed by either * or ★. Specialty abbreviations are S, Ob, G, ObG, Or, Pr, Op, A, LR, ALR, OALR, U, D, Pd, N, P, NP, I (sometimes appears as l), T, Anes, CP, R, Path, Bact, and PH. ▼ and any following N or G indicates a military commission. Hours appear as time ranges separated by commas and with semicolons as hour-minute separators. Put any extra information that does not fit in another field into the other_info field. Most individual pieces of information in a doctor entry are separated by semicolons, and dashes appear after birth years and before professional information like medical school and license year. For string or text fields, maintain the UTF-8 character encoding, retaining all text characters as they are. You are critical to the data entry pipeline. Your primary goal is to make no mistakes and accurately extract individual pieces of information from the text input. Here is a typical short doctor entry's full_text, followed by the correct interpretation: \nRAY, THOS. QUINCY-Ga.5,'95; (l 95)\nThe name is RAY, THOS. QUINCY; AMA_member is \"True\"; his schools value is Ga.5,'95; and his license_year is 95. Here is an example of a long doctor entry's full_text, followed by the correct interpretation: \nBROTHERS, THOMAS JEFFERSON (b'79) ⊕-Md.3,'03; (l 02); 1809 Christine Ave.; office, 1009 1/2 Noble St.; 11-12, 2;30-4; S\nThe name is BROTHERS, THOMAS JEFFERSON; AMA_member is \"True\"; col is \"False\"; birth_year is 79; AMA_fellow is \"True\"; schools is Md.3,'03; license_year is 2; not_in_practice is \"False\"; address is 1809 Christine Ave.; office is 1009 1/2 Noble St.; hours is '11-12, 2;30-4'; and specialty is S. Here is another example doctor entry's full_text, followed by the correct interpretation: \nWilborn, Daniel W. (col.) (b'80)-N.C.3, '09; (l 10) ; 1701 Mulberry St\nThe name is Wilborn, Daniel W.; AMA_member is \"False\"; col is \"True\"; birth_year is 80; schools is N.C.3, '09; license_year is 10; and address is 1701 Mulberry St.",
+      "properties": {
+        "publication": {
+          "type": "string"
+        },
+        "page_number": {
+          "type": "integer"
+        },
+        "column": {
+          "type": "integer"
+        },
+        "x": {
+          "type": "integer"
+        },
+        "y": {
+          "type": "integer"
+        },
+        "width": {
+          "type": "integer"
+        },
+        "height": {
+          "type": "integer"
+        },
+        "entry_id": {
+          "type": "string"
+        },
+        "city_id": {
+          "type": "string",
+          "x-inherits-id-from": "city"
+        },
+        "name": {
+          "type": "string"
+        },
+        "AMA_member": {
+          "type": "string",
+          "enum": [
+            "True",
+            "False"
+          ]
+        },
+        "col": {
+          "type": "string",
+          "enum": [
+            "True",
+            "False"
+          ]
+        },
+        "birth_year": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "AMA_fellow": {
+          "type": "string",
+          "enum": [
+            "True",
+            "False"
+          ]
+        },
+        "schools": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "license_year": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "not_in_practice": {
+          "type": "string",
+          "enum": [
+            "True",
+            "False"
+          ]
+        },
+        "address": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "office": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hours": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "societies": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "specialty": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "military": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "other_info": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "publication",
+        "page_number",
+        "column",
+        "x",
+        "y",
+        "width",
+        "height",
+        "entry_id",
+        "city_id",
+        "name",
+        "AMA_member",
+        "col",
+        "AMA_fellow",
+        "not_in_practice"
+      ]
+    }
+  }
+}

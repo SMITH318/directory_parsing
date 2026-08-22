@@ -75,7 +75,7 @@ def print_MOE_header():
 
 def compare_MOEs(group, n_diffs, n_cells):
     obs_diff_rate = n_diffs/n_cells
-    conf_moes = "|".join([f"+/-{margin_of_error(z, n_cells, obs_diff_rate)*100:>7.2}%" for _, z in CONFIDENCE_ZSCORES])
+    conf_moes = "|".join([f"+/-{margin_of_error(z, n_cells, obs_diff_rate)*100:>7.2f}%" for _, z in CONFIDENCE_ZSCORES])
     print(
         f"|{group:<15}|{n_cells:>8}|{n_diffs:>8}|{obs_diff_rate*100:>9.2f}%|{conf_moes}|"
     )
@@ -151,7 +151,7 @@ def find_differences(df1, df2, fix_easy_errors):
 
     # Print columns' MOEs
     print_MOE_sep_row('=')
-    for col, n in diffs_by_col[diffs_by_col > 0].items(): 
+    for col, n in diffs_by_col.items(): 
         compare_MOEs(col, n, len(df_output))
 
     # Print detailed column differences

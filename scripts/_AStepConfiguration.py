@@ -1,17 +1,10 @@
-# from collections.abc import Generator
 from abc import ABC, abstractmethod
-# from pydantic import ValidationError
 import datetime
 import json
-# import gc
-# import os
 from pathlib import Path
-# from google import genai
 from google.genai import types
-# from google.genai import errors
-# import time
 import pandas as pd
-from pydantic import BaseModel
+from pydantic import BaseModel, create_model
 import csv
 import logging
 from _clean_gemini import *

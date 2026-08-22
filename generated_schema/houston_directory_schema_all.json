@@ -1,0 +1,264 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HoustonDirectorySchema",
+  "description": "Unified metadata schema and parsing instructions tailored specifically for digitizing the 1870-71, 1873, 1892-1893, and 1900-1901 Houston City Directories.",
+  "x-classify-prompt": "You are a professional historical transcription engine. Your task is to process sequential OCR text blocks from a column of a historical Houston city directory (from the 1870-71, 1873, 1892-1893, or 1900-1901 editions) and combine them into unified, complete records before parsing.\n\n### Layout Rules & Combination Logic:\n1. **Multi-line Identification:** Directories are printed in narrow columns, causing individual listings to wrap across multiple lines. A new record ALWAYS begins with a bold, uppercase, or flush-left surname, business name, or geographic header at the far left margin of the column. Subsequent indented lines that do not start with a new name are continuations and must be merged with the preceding line.\n2. **Hyphenation Restoration:** When merging lines, check for words split across a line break with a hyphen (e.g., 'shoem-' on line 1 and 'kr' on line 2). Combine them into a single word (e.g., 'shoemkr') and remove the hyphen. Do not remove hyphens that are part of street addresses or compound names.\n3. **Preserve Raw Characters:** Retain all original OCR formatting, punctuation, abbreviations, and special demographic markers such as '(c)', 'r.', 'h.', 'bds.', 'rms.', 'res.', 'cor.', 'bt.', 'bet.', and 'b.' (often used in 1873 for 'between').\n4. **Calculate Bounding Boxes:** For merged lines, calculate a combined bounding box that physically encloses all constituent lines. The combined 'x' should be the minimum 'x' of the combined lines, 'y' should be the minimum 'y', 'width' should be the span covering the furthest right edge, and 'height' should span from the top of the first line to the bottom of the last combined line.\n5. **Classify Entries:** Label each consolidated entry as one of the following:\n   - 'INDIVIDUAL' (residential or individual worker entries, e.g., 'Abell Andrew A., carp...')\n   - 'BUSINESS' (standalone merchant, partnerships, or corporate listings, e.g., 'Bering-Cortes Hardware Co...')\n   - 'GEOGRAPHIC_METADATA' (street directories, ward boundaries, or fire limit definitions, e.g., 'First Ward-Bounded by...')\n   - 'UNKNOWN' (if it cannot be determined or is an unreadable fragment).\n\nReturn a JSON array of the combined entries, containing the publication, page, column, calculated bounding box, combined raw text, and classification.",
+  "type": "object",
+  "properties": {
+    "individuals": {
+      "type": "array",
+      "description": "Individual residents, lodgers, workers, and heads of household parsed from individual listings.",
+      "items": {
+        "$ref": "#/definitions/IndividualListing"
+      }
+    },
+    "businesses": {
+      "type": "array",
+      "description": "Standalone business entries, corporations, partnerships, and institutions parsed from business directory listings.",
+      "items": {
+        "$ref": "#/definitions/BusinessListing"
+      }
+    },
+    "geographic_metadata": {
+      "type": "array",
+      "description": "Street guides, ward boundary definitions, and city fire limit descriptions parsed from geographic directory pages.",
+      "items": {
+        "$ref": "#/definitions/GeographicMetadata"
+      }
+    }
+  },
+  "definitions": {
+    "IndividualListing": {
+      "type": "object",
+      "x-parse-prompt": "Parse the provided unified Individual listing from the Houston City Directory. Your goal is to accurately segment the raw combined text into structured fields without losing historical details.\n\n### Extraction Instructions:\n1. **Name Segment (`surname`, `given_names`, `title`):** Extract the full name from the start of the line. Surnames are listed first, followed by given names and middle initials (e.g., 'Abell Andrew A.'). Extract titles like 'Rev.', 'Mrs.', 'Dr.', 'Col.', or 'Major'. Note: 'Rev.' may occasionally be OCR'd as 'Rer' in both the 1870-71 and 1873 directories; normalize this to 'Rev.' in the 'title' field but preserve the raw spelling in 'raw_text'.\n2. **Marital / Widow Status (`is_widow`, `widow_of_name`):** In Morrison & Fourmy's 1892-1893 directory, widows are frequently noted with parentheticals (e.g., 'ERMANN ELLEN (wid J. H.)'). If '(wid [Name])' or similar is found, set 'is_widow' to true and extract the husband's name/initials (e.g., 'J. H.') to 'widow_of_name'. Otherwise, 'is_widow' is false and 'widow_of_name' is null.\n3. **Racial Designation (`race_designation`, `is_colored`):** Look for race markers. In 1892-1893 and 1900-1901, directories use '(c)' or '(col.)' to designate colored/Black residents. Extract the exact string to 'race_designation' and set 'is_colored' to true. If no marker is present, leave 'race_designation' as null and set 'is_colored' to false.\n4. **Occupation & Employer (`occupation`, `employer`):** Extract the job title and where they work. Many occupations are abbreviated (e.g., 'carp' for carpenter, 'shoemkr' for shoemaker, 'lab' for laborer, 'clk' for clerk, 'engr' for engineer). If they are an officer or professional, capture that role. The employer or company name typically follows the occupation (e.g., 'waiter Grand Central Hotel' -> occupation: 'waiter', employer: 'Grand Central Hotel').\n5. **Business/Partnership Association (`partnership_association`):** In 1892-1893 listings, individuals often have their parent company listed in parentheses right after their name (e.g., 'Jester Robert (Jester & Stricklin)'). Extract 'Jester & Stricklin' to 'partnership_association'.\n6. **Social & Residential Status (`residential_status`, `raw_residential_status_char`):** Carefully parse the residential status designator, which is a vital indicator of social class and household structure:\n   - 'r.', 'res', or 'resides' -> Map to 'resides'.\n   - 'h.' -> Map to 'home'.\n   - 'bds' or 'boards' -> Map to 'boards'.\n   - 'rms' or 'rooms' -> Map to 'rooms'.\n   - Save the exact character string found in 'raw_residential_status_char'.\n7. **Residential Address (`residential_address`):** Extract the full address following the residential status designator. Look for side-of-street qualifiers ('ns', 'ss', 'es', 'ws') and intersections ('bt' / 'bet' / 'b.' between, 'cor' corner). E.g., 'Rusk b Austin and Caroline' -> parse address as 'Rusk between Austin and Caroline'. If the address is listed as 'same' or 'res same', it means their home is at their business address.\n8. **Household Connections (`host_or_head_name`):** If the individual boards ('bds') or rooms ('rms') with someone (e.g., 'bds Dr. James Cowling'), extract the host's name ('Dr. James Cowling') to map social networks.",
+      "properties": {
+        "publication": {
+          "type": "string",
+          "enum": ["1870-71", "1873", "1892-1893", "1900-1901"]
+        },
+        "page_number": {
+          "type": "integer"
+        },
+        "column": {
+          "type": "integer"
+        },
+        "entry_id": {
+          "type": "string",
+          "description": "Unique record identifier (e.g., HOU_1892_104_01_00021)"
+        },
+        "raw_text": {
+          "type": "string",
+          "description": "The combined, unparsed raw OCR line."
+        },
+        "surname": {
+          "type": "string",
+          "description": "The individual's last name (e.g., 'Harmon', 'Ermann')."
+        },
+        "given_names": {
+          "type": "string",
+          "description": "First name, middle names, or initials (e.g., 'Frederick A.', 'Ellen')."
+        },
+        "title": {
+          "type": [ "string", "null" ],
+          "description": "Honorifics or titles (e.g., 'Rev.', 'Mrs.', 'Dr.', 'Col.')."
+        },
+        "is_widow": {
+          "type": "boolean",
+          "description": "Flag indicating if the listing denotes a widow (commonly marked 'wid' in 1892-1893)."
+        },
+        "widow_of_name": {
+          "type": [ "string", "null" ],
+          "description": "The name or initials of the deceased husband if specified (e.g., 'J. H.')."
+        },
+        "race_designation": {
+          "type": [ "string", "null" ],
+          "description": "The raw race indicator exactly as printed, e.g., 'c', 'col.', or null."
+        },
+        "is_colored": {
+          "type": "boolean",
+          "description": "Flag indicating if the listing denotes a colored or Black resident."
+        },
+        "occupation": {
+          "type": [ "string", "null" ],
+          "description": "Parsed occupation or job title (e.g., 'carp', 'waiter', 'surveyor')."
+        },
+        "employer": {
+          "type": [ "string", "null" ],
+          "description": "Name of employer, institution, or railroad company (e.g., 'So. Pac. Ry')."
+        },
+        "partnership_association": {
+          "type": [ "string", "null" ],
+          "description": "The name of the firm/partnership this individual is affiliated with, if parenthesized next to their name."
+        },
+        "residential_status": {
+          "type": "string",
+          "enum": ["resides", "home", "boards", "rooms", "unknown"]
+        },
+        "raw_residential_status_char": {
+          "type": [ "string", "null" ],
+          "description": "The actual character/abbreviation used in the directory (e.g., 'r.', 'h.', 'bds', 'rms', 'res')."
+        },
+        "residential_address": {
+          "type": [ "string", "null" ],
+          "description": "The parsed residential location, including street name, side of street, and between streets (e.g., '1208 Clay ave.')."
+        },
+        "host_or_head_name": {
+          "type": [ "string", "null" ],
+          "description": "The name of the household head or host if the individual is boarding or rooming (e.g., 'Mrs. R. A. Boggs')."
+        },
+        "business_name_or_detail": {
+          "type": [ "string", "null" ],
+          "description": "Private business name, saloon name, or shop type mentioned in the entry."
+        },
+        "business_address": {
+          "type": [ "string", "null" ],
+          "description": "Address of the shop or office if listed in this individual entry."
+        },
+        "bounding_box": {
+          "type": "object",
+          "properties": {
+            "x": { "type": "integer" },
+            "y": { "type": "integer" },
+            "width": { "type": "integer" },
+            "height": { "type": "integer" }
+          },
+          "required": ["x", "y", "width", "height"]
+        }
+      },
+      "required": [
+        "publication",
+        "page_number",
+        "column",
+        "entry_id",
+        "raw_text",
+        "surname",
+        "given_names",
+        "is_widow",
+        "is_colored",
+        "residential_status",
+        "bounding_box"
+      ]
+    },
+    "BusinessListing": {
+      "type": "object",
+      "x-parse-prompt": "Parse the provided unified Business entry from the Houston City Directory.\n\n### Extraction Instructions:\n1. **Business Name (`business_name`):** Extract the full, official name of the business or organization (usually printed in bold, uppercase, or as the starting segment of the entry, e.g., 'HOUSTON COLD STORAGE CO.').\n2. **Business Type (`business_type`):** Extract the line of work, specialty, or products sold (e.g., 'wholesale and retail hardware', 'painters', 'heavy hardware', 'cold storage, mfrs and dealers in ice').\n3. **Succession Details (`succession_info`):** If the listing indicates a successor status (e.g., 'Successors to Wm. Harral', 'successor to J. R. Morris & Co.'), capture this exact historical context.\n4. **Business Address (`business_address`):** Extract the street address, building name, or intersection of the business office, shop, or yard (e.g., 'ne cor 2d, Railroad').\n5. **Officers & Partners (`officers_or_partners`):** If corporate officers, board members, or partners are listed in brackets or parentheses within the business entry, extract their names as an array (e.g., 'McWILLIAMS H. L. & CO. (Hugh L. McWilliams, Andrew J. Pipher)' -> ['Hugh L. McWilliams', 'Andrew J. Pipher']; 'Hall & Strawn (James T. Hall, Charles S. Strawn)' -> ['James T. Hall', 'Charles S. Strawn']).",
+      "properties": {
+        "publication": {
+          "type": "string",
+          "enum": ["1870-71", "1873", "1892-1893", "1900-1901"]
+        },
+        "page_number": {
+          "type": "integer"
+        },
+        "column": {
+          "type": "integer"
+        },
+        "entry_id": {
+          "type": "string"
+        },
+        "raw_text": {
+          "type": "string"
+        },
+        "business_name": {
+          "type": "string",
+          "description": "Name of the business, partnership, or corporation."
+        },
+        "business_type": {
+          "type": [ "string", "null" ],
+          "description": "Type of business or trade specialty (e.g., 'heavy hardware', 'baker and grocer')."
+        },
+        "succession_info": {
+          "type": [ "string", "null" ],
+          "description": "Information about prior firms succeeded by this business."
+        },
+        "business_address": {
+          "type": [ "string", "null" ],
+          "description": "The parsed business address or office location."
+        },
+        "officers_or_partners": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Array of listed partners, corporate officers, or family members."
+        },
+        "bounding_box": {
+          "type": "object",
+          "properties": {
+            "x": { "type": "integer" },
+            "y": { "type": "integer" },
+            "width": { "type": "integer" },
+            "height": { "type": "integer" }
+          },
+          "required": ["x", "y", "width", "height"]
+        }
+      },
+      "required": [
+        "publication",
+        "page_number",
+        "column",
+        "entry_id",
+        "raw_text",
+        "business_name",
+        "bounding_box"
+      ]
+    },
+    "GeographicMetadata": {
+      "type": "object",
+      "x-parse-prompt": "Parse the provided geographic listing, ward boundary, street directory, or fire limit entry from the Houston City Directory.\n\n### Extraction Instructions:\n1. **Entity Type (`entity_type`):** Classify the geographic entity. Use 'WARD' for ward boundaries, 'STREET' for street directory descriptions, 'FIRE_LIMITS' for fire boundary descriptions, or 'OTHER' for landmarks or parks.\n2. **Name (`name`):** Extract the name of the ward, street, or boundary (e.g., 'First Ward', 'Abbott', 'Fire Limits').\n3. **Description (`description_or_bounds`):** Extract the full boundary description, starting/ending points, or geographic descriptions exactly as written (e.g., 'Bounded by Main st, White Oak bayou, Congress st and a line...').\n4. **Ward Association (`ward_association`):** In street directories, look for parenthetic ward markers (e.g., 'Abel (5th ward)') and extract the ward name ('5th ward') to establish street-to-ward mapping.",
+      "properties": {
+        "publication": {
+          "type": "string",
+          "enum": ["1870-71", "1873", "1892-1893", "1900-1901"]
+        },
+        "page_number": {
+          "type": "integer"
+        },
+        "column": {
+          "type": "integer"
+        },
+        "entry_id": {
+          "type": "string"
+        },
+        "raw_text": {
+          "type": "string"
+        },
+        "entity_type": {
+          "type": "string",
+          "enum": ["WARD", "STREET", "FIRE_LIMITS", "OTHER"]
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the street, ward, or geographic boundary."
+        },
+        "description_or_bounds": {
+          "type": "string",
+          "description": "Geographic descriptions, boundaries, extension routes, or limits."
+        },
+        "ward_association": {
+          "type": [ "string", "null" ],
+          "description": "Parent ward associated with this street, if specified."
+        },
+        "bounding_box": {
+          "type": "object",
+          "properties": {
+            "x": { "type": "integer" },
+            "y": { "type": "integer" },
+            "width": { "type": "integer" },
+            "height": { "type": "integer" }
+          },
+          "required": ["x", "y", "width", "height"]
+        }
+      },
+      "required": [
+        "publication",
+        "page_number",
+        "column",
+        "entry_id",
+        "raw_text",
+        "entity_type",
+        "name",
+        "description_or_bounds",
+        "bounding_box"
+      ]
+    }
+  }
+}

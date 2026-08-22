@@ -41,6 +41,7 @@ def main():
     parser.add_argument("dataset", help="Name of the dataset")
     parser.add_argument("--pdf-dir", help="Directory containing the input PDFs", default=None)
     parser.add_argument("--preprocessed", help="Directory for preprocessed images", default=None)
+    parser.add_argument("--config", help="Path to JSON schema config with embedded prompts", default=None)
     
     args = parser.parse_args()
     dataset = args.dataset
@@ -55,7 +56,8 @@ def main():
 
     all_args = [dataset, "--pdf-dir", pdf_dir_arg, "--preprocessed", preprocessed_arg]
     preproc_args = [dataset, "--preprocessed", preprocessed_arg]
-
+    config_args = [dataset, "--config", args.config] if args.config else [dataset]
+    
     steps = [
         # (script_name, arguments, expected_output_file, manual_step_name)
         ("01_preprocess.py", all_args, Path(preprocessed_arg) / "all_metadata.json", None),
@@ -64,16 +66,18 @@ def main():
         ("02_sanity_check.py", preproc_args, None, None), 
         ("03_combine_sort_OCR.py", [dataset], data_dir / "03_ocr_output_combined_sorted.jsonl", None),
         (None, None, data_dir / "04_ocr_output_cleaned.jsonl", "04_clean_OCR_manual.ipynb"),
-        ("05_classify_lines_gemini.py", [dataset], data_dir / "05_entries_segmented.csv", None),
+        ("05_classify_lines_gemini.py", config_args, data_dir / "05_entries_segmented.csv", None),
         ("05_sanity_check.py", [dataset], None, None),
-        (None, None, data_dir / "07_entries_segmented_man_cleaned.csv", "Prepare for Review & Review Changes (Manual)"),
-        ("08_split_parsed_entries.py", [dataset], data_dir / "08_doc_entries.csv", None), 
-        ("09_parse_doc_entries_gemini.py", [dataset], data_dir / "09_doc_entries_parsed.csv", None),
-        ("09_parse_city_entries_gemini.py", [dataset], data_dir / "09_city_entries_parsed.csv", None),
-        ("09_sanity_check.py", [dataset], None, None),
-        ("10_sort_entries.py", [dataset], data_dir / "10_doc_entries_sorted.csv", None),
-        ("11_reformat_to_chrisinger.py", [dataset], data_dir / "amd_1918_reformatted.csv", None),
+        (None, None, data_dir / "07_entries_segmented_man_cleaned.csv", "Review Segmented Entries Manual"),
+        ("08_split_parsed_entries.py", config_args, data_dir / "08_split_complete.txt", None), 
+        ("09_parse_entries_generic.py", config_args, data_dir / "09_parse_complete.txt", None),
+        ("09_sanity_check.py", config_args, None, None),
+        ("10_sort_entries.py", config_args, data_dir / "10_entries_sorted.csv", None),
     ]
+    if not args.config:
+        steps.append(
+            ("11_reformat_to_chrisinger.py", [dataset], data_dir / "amd_1918_reformatted.csv", None)
+        )
     
     data_dir.mkdir(parents=True, exist_ok=True)
     

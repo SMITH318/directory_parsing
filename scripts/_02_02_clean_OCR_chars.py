@@ -29,13 +29,14 @@ RE_MAP = {
     #replace multiple dashes and dash-like characters with single dash
     re.compile(r"[-–—━]"): "-",
     #replace any colons with semi-colons
-    re.compile(':'): ';',
+    # re.compile(':'): ';', # probably overkill with better OCR
     #replace commas and underscores with periods
     #text=re.sub('[,_]', '.', text)
     #cleanup '(l'89)' format - often 'l' appears as 'I' or '1', space not always there
     re.compile(r"\([lI1][ ']?(?P<year>[0-9]{2})\)"): r'(l \g<year>)',
     #cleanup '(l †)' to '(l t)' format - often 'l' appears as 'I' or '1', space not always there, 't' sometimes f
     re.compile(r"\([lI1][ ']?[tf†]\)"): r'(l t)',
+    re.compile(r"[lI1][ '][tf†]"): r'(l t)', # in 1921 can appear outside of parentheses
     #replace single character 1/2 with unbundled
     re.compile(r' ?½|(1⁄2)'): r" 1/2", # ½ causes problems when sent back to Gemini
     #reduce multiples of any non-word character (space, punctuation) to single
@@ -46,8 +47,9 @@ RE_MAP = {
     re.compile(r'\(#\)'): r'(‡)',
     #replace -|; or -┇; with -◊;
     re.compile(r'\- ?[|│┇╲╰╂] ?;'): r'-◊;',
+    re.compile(r'; [|││┇╲];'): r'; ◊;', # in 1921, can appear between semicolons
     #replace -|; or -┇; with -◊;
-    re.compile(r'\- ?[┳Δ] ?;'): r'-△;',
+    # re.compile(r'\- ?[┳Δ] ?;'): r'-△;',
 }
 
 def clean_text(s: str) -> str:
@@ -119,5 +121,6 @@ if __name__ == "__main__":
     else: #tests
         # print("'"+re.compile(r'(?P<char>\W)\1+').sub(r'\g<char>', ".;;... ''.")+"'")
         # clean_lines('clean_tests.txt', 'clean_tests_out.txt')
+        print(clean_text("Harris, J. Monroe; │; (l t)"))
         print(clean_text("Cocciola, Louis-┇; (l 00); 2000, 12th"))
         print(clean_text("Williams, Larkin Wiley (b'48)-╲; (l 88)"))
